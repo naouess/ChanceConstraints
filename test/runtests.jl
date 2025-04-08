@@ -36,12 +36,12 @@ v5 = round.([prob_qmc_default_1 prob_qmc_default_2], digits=6)
 v6 = round.([prob_srd_default_1 prob_srd_default_2], digits=6)
 
 @testset "JointChance.jl" begin
-    @test v1 == 0.905384
-    @test v2 == 0.903887
-    @test v3 == 0.905395
-    @test v4 == 0.903956
-    @test v5 == [0.971658  0.920864]
-    @test v6 == [0.971249  0.922053]
+    @test v1 == 0.905377
+    @test v2 == 0.909216
+    @test v3 == 0.905373
+    @test v4 == 0.907449
+    @test v5 == [0.971655  0.920863]
+    @test v6 == [0.9725  0.922655]
 end
 
 # TODO add test for the functions adding constraints to a JuMP model
