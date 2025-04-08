@@ -141,7 +141,8 @@ function compute_with_SRD(w::Integer, κ::Integer, Σ::AbstractMatrix, μ::Abstr
     L = cholesky(Σ, check=true).L
 
     # Compute Sample on the sphere
-    SampleOnSphere = randn(rng, SampleSize, dim_cons * (dim_x - dim_cons + 1))
+    # SampleOnSphere = randn(rng, SampleSize, dim_cons * (dim_x - dim_cons + 1))
+    SampleOnSphere = randn(SampleSize, dim_cons * (dim_x - dim_cons + 1))
 
     for j in 1:dim_x-dim_cons+1
         i = dim_cons * (j-1) + 1
@@ -160,16 +161,14 @@ function compute_with_SRD(w::Integer, κ::Integer, Σ::AbstractMatrix, μ::Abstr
 
     k = (1+κ) * (w-1) + 1
 
-    # f(x...) = ProbFunction(vec([x[r] for r in w:w+κ]), SampleOnSphere[:, k:k+κ], μ[w:w+κ])[1]
-    f(x...) = ProbFunction(collect(x[w:w+κ]), SampleOnSphere[:, k:k+κ], μ[w:w+κ])[1]
+    f(x...) = ProbFunction(vec([x[r] for r in w:w+κ]), SampleOnSphere[:, k:k+κ], μ[w:w+κ])[1]
 
     function ∇f(g::AbstractVector{T}, x::T...) where {T}
         for i in eachindex(x)
             if i in w:w+κ
-                # g[i] = ProbFunction(vec([x[r] for r in w:w+κ]), SampleOnSphere[:, k:k+κ], μ[w:w+κ])[2][i-w+1]
-                g[i] = ProbFunction(collect(x[w:w+κ]), SampleOnSphere[:, k:k+κ], μ[w:w+κ])[2][i-w+1]
+                g[i] = ProbFunction(vec([x[r] for r in w:w+κ]), SampleOnSphere[:, k:k+κ], μ[w:w+κ])[2][i-w+1]
             else 
-                g[i] = 0e-10
+                g[i] = 0.00000
             end 
         end
         return
