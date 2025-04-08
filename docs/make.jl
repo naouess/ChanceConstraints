@@ -1,9 +1,9 @@
 push!(LOAD_PATH,"../src/")
-using Documenter, JointChance
+using Documenter, ChanceConstraints
 
 makedocs(
-         sitename = "JointChance.jl",
-         modules  = [JointChance],
+         sitename = "ChanceConstraints.jl",
+         modules  = [ChanceConstraints],
          pages=[
                 "Home" => "index.md",
                 "Individual Chance Contraints" => "icc.md",
@@ -12,5 +12,5 @@ makedocs(
                ])
                
 deploydocs(;
-    repo="github.com/naouess/JointChance.jl",
+    repo="github.com/naouess/ChanceConstraints.jl",
 )
