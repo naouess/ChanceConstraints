@@ -1,4 +1,4 @@
-using JointChance
+using ChanceConstraints
 using Test
 using Random
 
