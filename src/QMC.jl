@@ -47,37 +47,37 @@ function compute_with_QMC(j::Integer, κ::Integer, Σ::AbstractMatrix, μ::Abstr
 	Σ_j = Σ[idx, idx]
 	μ_j = μ[idx]
 	a_j = fill(-Inf, κ+1)
-
+  
 	if two_sided
-	    f1(x...) = mvnormcdf(μ_j, Σ_j, collect(x[idx]),
-                    vec([x[i + length(x) ÷ 2] for i in idx]), 
+	    f1(x...) = mvnormcdf(Σ_j, vec([x[i] for i in idx]) - μ_j, # collect(x[idx])
+                    vec([x[i + length(x) ÷ 2] for i in idx]) - μ_j, 
                     m = s, rng = rng)[1]
 		f = f1
-		e1(x...) = mvnormcdf(μ_j, Σ_j, collect(x[idx]),
-			vec([x[i + length(x) ÷ 2] for i in idx]), 
+		e1(x...) = mvnormcdf(Σ_j, vec([x[i] for i in idx]) - μ_j,
+			vec([x[i + length(x) ÷ 2] for i in idx]) - μ_j, 
 			m = s, rng = rng)[2]
 	    e = e1
 	else
-		f2(x...) = mvnormcdf(μ_j, Σ_j, a_j,
-			collect(x[idx]), 
+		f2(x...) = mvnormcdf(Σ_j, a_j - μ_j,
+			vec([x[i] for i in idx]) - μ_j, 
 			m = s, rng = rng)[1]
 		f = f2
-		e2(x...) = mvnormcdf(μ_j, Σ_j, a_j, 
-			collect(x[idx]), 
+		e2(x...) = mvnormcdf(Σ_j, a_j - μ_j, 
+			vec([x[i] for i in idx]) - μ_j, 
 			m = s, rng = rng)[2]
 		e = e2
 	end 
 
 	@assert e != 0 "Numerical issues detected! Results could be unstable or wrong. One of the reasons can be an ill-conditioned Σ matrix"
 
-	norm_pdf(k) = exp(-0.5 * k^2) / sqrt(2π)
+	norm_pdf(k) = exp(-(k^2) / 2) / (2 * pi)^0.5
 
     function ∇f(g::AbstractVector{T}, x::T...) where {T}
 		idx = j:j+κ
 		Σ_j = Σ[idx, idx]
 		μ_j = μ[idx]
 		a_j = fill(-Inf, κ+1)
-		σ_j = sqrt.(diag(Σ_j))
+		σ_j = sqrt.(diag(Σ_j, 0))
 
 		for o in eachindex(x)
 			# i = mod1(o, κ+1) # Adjust index for both sides if two_sided
@@ -96,46 +96,10 @@ function compute_with_QMC(j::Integer, κ::Integer, Σ::AbstractMatrix, μ::Abstr
 											   two_sided ? vec([x[k + length(x) ÷ 2] for k in idx if k != i]) - μ_new[1:end .!= i-j+1] : vec([x[k] for k in idx if k != i])-μ_new[1:end .!=i-j+1], # TODO indexing here is not generalized  
 											   m = s, rng = rng)[1]
 			else
-				g[o] = 0e-10
+				g[o] = 1e-10
 			end
 		end
-
-		# if two_sided == false
-		# 	for i in eachindex(x)
-		# 		if i in j:j+κ
-		# 			Σ_new = Σ_j - inv(Σ_j[i-j+1, i-j+1]) * Σ_j[i-j+1, :] * transpose(Σ_j[i-j+1,:])
-		# 			μ_new = μ_j + inv(Σ_j[i-j+1, i-j+1]) * (x[i] - μ_j[i-j+1]) * Σ_j[i-j+1, :]
-
-		# 			g[i] = norm_pdf((x[i] - μ_j[i-j+1])/σ_j[i-j+1]) / σ_j[i-j+1] * 
-		# 							mvnormcdf(
-		# 								Σ_new[1:end .!= i-j+1, 1:end .!= i-j+1], 
-		# 								a_j[1:end .!=i-j+1]-μ_new[1:end .!=i-j+1], 
-		# 								vec([x[k] for k in j:j+κ if k != i])-μ_new[1:end .!=i-j+1], 
-		# 								m = s, 
-		# 								rng = rng)[1]  
-		# 		else 
-		# 			g[i] = 0.00000
-		# 		end
-		# 	end
-		# else 
-		# 	for o in eachindex(x)
-		# 		i = (o <= length(x) ÷ 2) ? o : o - length(x) ÷ 2
-		# 		if i in j:j+κ
-		# 			Σ_new = Σ_j - inv(Σ_j[i-j+1, i-j+1]) * Σ_j[i-j+1, :] * transpose(Σ_j[i-j+1,:])
-		# 			μ_new = μ_j + inv(Σ_j[i-j+1, i-j+1]) * (x[o] - μ_j[i-j+1]) * Σ_j[i-j+1, :]  
-		# 			g[o] = 	(-1)^((o <= length(x) ÷ 2) ? 1 : 2) * 
-		# 					        norm_pdf((x[o] - μ_j[i-j+1])/σ_j[i-j+1]) / σ_j[i-j+1] * 
-		# 							mvnormcdf(
-		# 								Σ_new[1:end .!= i-j+1, 1:end .!= i-j+1], 
-		# 								vec([x[k] for k in j:j+κ if k != i])-μ_new[1:end .!=i-j+1], 
-		# 								vec([x[k + length(x) ÷ 2] for k in j:j+κ if k != i])-μ_new[1:end .!=i-j+1], # TODO indexing here is not generalized 
-		# 								m = s, 
-		# 								rng = rng)[1]  
-		# 		else 
-		# 			g[o] = 0.00000
-		# 		end
-		#     end
-	    # end 
+		
 		return
 	end
 	return f, ∇f
@@ -186,9 +150,9 @@ problem, the argument `rng` can be unfixed by passing the value `RandomDevice()`
 function add_JCC_QMC(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::Integer, Σ::AbstractMatrix, μ::AbstractArray, p::Float64, 
 	two_sided::Bool = false, s::Integer = 5000, rng = MersenneTwister(1234))
     for j in idx
-		JuMP.register(m, Symbol("mvncdf_$(x)_$j"), length(x), compute_with_QMC(j, κ, Σ, μ, two_sided, s, rng)[1], 
+		JuMP.register(m, Symbol("mvncdf_$j"), length(x), compute_with_QMC(j, κ, Σ, μ, two_sided, s, rng)[1], 
 					compute_with_QMC(j, κ, Σ, μ, two_sided, s, rng)[2])
-		JuMP.add_nonlinear_constraint(m, :($(Symbol("mvncdf_$(x)_$j"))($(x...)) >= $(p)))
+		JuMP.add_nonlinear_constraint(m, :($(Symbol("mvncdf_$j"))($(x...)) >= $(p)))
 
 		# Non-legacy reformulation:
 		# sym = add_nonlinear_operator(m, length(x), compute_with_QMC(j, κ, Σ, μ, two_sided, s, rng)[1], compute_with_QMC(j, κ, Σ, μ, two_sided, s, rng)[2]; name = Symbol("mvncdf_$j"))

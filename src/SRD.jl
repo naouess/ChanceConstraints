@@ -33,6 +33,10 @@ function ProbFunction(x, SampleOnSphere, mu)
         active = 0
         
         y = x - mu
+
+        if maximum(y) < 0
+            error("ProbFunction() ... current x no slater point")
+        end
         
         for k = 1:M
             
@@ -127,9 +131,9 @@ problem, the argument `rng` can be unfixed by passing the value `RandomDevice()`
 """
 function compute_with_SRD(w::Integer, κ::Integer, Σ::AbstractMatrix, μ::AbstractVector, 
     s::Integer = 5000, rng = MersenneTwister(1234))
-
+    
     #  Validate inputs
-	@assert all(v -> v > 0, (w, κ, s)) "The parameters w, κ, s should be strictly positive."
+	@assert all(u -> u > 0, (w, κ, s)) "The parameters w, κ, s should be strictly positive."
 	@assert size(Σ) == (length(μ), length(μ)) "Σ must be square and match the dimension of μ."
 
     # Set dimension of each probability constraint
@@ -141,9 +145,9 @@ function compute_with_SRD(w::Integer, κ::Integer, Σ::AbstractMatrix, μ::Abstr
     L = cholesky(Σ, check=true).L
 
     # Compute Sample on the sphere
-    # SampleOnSphere = randn(rng, SampleSize, dim_cons * (dim_x - dim_cons + 1))
-    SampleOnSphere = randn(SampleSize, dim_cons * (dim_x - dim_cons + 1))
-
+    SampleOnSphere = randn(rng, SampleSize, dim_cons * (dim_x - dim_cons + 1))
+    # SampleOnSphere = randn(SampleSize, dim_cons * (dim_x - dim_cons + 1))
+    
     for j in 1:dim_x-dim_cons+1
         i = dim_cons * (j-1) + 1
         for n = 1:SampleSize
@@ -220,9 +224,9 @@ problem, the argument `rng` can be unfixed by passing the value `RandomDevice()`
 function add_JCC_SRD(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::Integer, Σ::AbstractMatrix, μ::AbstractArray, p::Float64, 
     s::Integer = 5000, rng = MersenneTwister(1234))
     for j in idx
-		JuMP.register(m, Symbol("srd_prob_$(x)_$j"), length(x), compute_with_SRD(j, κ, Σ, μ, s, rng)[1], 
+		JuMP.register(m, Symbol("srd_prob_$j"), length(x), compute_with_SRD(j, κ, Σ, μ, s, rng)[1], 
                     compute_with_SRD(j, κ, Σ, μ, s, rng)[2])
-        JuMP.add_nonlinear_constraint(m, :($(Symbol("srd_prob_$(x)_$j"))($(x...)) >= $(p)))
+        JuMP.add_nonlinear_constraint(m, :($(Symbol("srd_prob_$j"))($(x...)) >= $(p)))
 
 		# Non-legacy reformulation:
 		# sym = add_nonlinear_operator(m, length(x), compute_with_SRD(j, κ, Σ, μ, s, rng)[1], compute_with_SRD(j, κ, Σ, μ, s, rng)[2]; name = Symbol("srd_prob_$(x)_$j"))
