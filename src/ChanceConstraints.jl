@@ -1,5 +1,8 @@
 module ChanceConstraints
-    using JuMP, MvNormalCDF, Random, Distributions, SpecialFunctions, LinearAlgebra
+    using MvNormalCDF, Random, Distributions, SpecialFunctions, LinearAlgebra
+    
+    import Reexport
+    Reexport.@reexport using JuMP
 
     export add_JCC_SRD, add_JCC_QMC, compute_with_SRD, compute_with_QMC
 
