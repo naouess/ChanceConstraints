@@ -37,7 +37,6 @@ theorem, as described in Section X.
   evaluation with a non-fixed random source, pass `RandomDevice()`.
 
 """
-
 function compute_with_QMC(
     j::Integer,
     κ::Integer,
