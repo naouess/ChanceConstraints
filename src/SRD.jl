@@ -1,184 +1,231 @@
 #=
+```julia
     ProbFunction(x, SampleOnSphere, mu)
+```
 
-    This function computes the probability of a given vector `x` 
-    being less than or equal to a normal random variable `xi` 
-    with mean `mu` and a given covariance matrix, based on a sample
-    of points distributed on the unit sphere.
+Estimate the probability that each component of ``x`` is greater than or equal
+to the corresponding component of a normally distributed random vector
+``\\xi``:
 
-    TODO 
+```math
+\\mathbb{P}(x_i \\geq \\xi_i \\text{ for all } i).
+```
+
+The estimate is computed using `SampleOnSphere`, a sample of points on the
+unit sphere, and a normal random vector with mean ``\\mu`` and the covariance
+structure used to construct the samples.
+
+# Arguments
+- `x`: Vector of threshold values.
+- `SampleOnSphere`: Sample of points on the unit sphere used in the
+  probability estimate.
+- `mu`: Mean vector of the normal random vector.
 
 =#
 
 function ProbFunction(x, SampleOnSphere, mu)
-      
-    SampleSize, M = size(SampleOnSphere)
-    PROB = 0
-    
-    # Required gamma values for Chi-distibution
-    gm = [loggamma(M/2.0), loggamma(M/2.0 + 1.0), gamma(M/2.0)]
-    
-    # setup gradient
-    grad = zeros(size(x, 1), 1)
-    
-    for sample = 1:SampleSize
-        
-        # Select sample on sphere
-        v = SampleOnSphere[sample, :]'
-        
-        # Compute radius r (Inner problem)
-        
-        # Pre-Initialization
-        r = 1e99
-        active = 0
-        
-        y = x - mu
 
-        if maximum(y) < 0
-            error("ProbFunction() ... current x no slater point")
-        end
-        
-        for k = 1:M
-            
-            # k-th component
-            rstep = y[k] / v[k]
-            
-            if rstep > 0
-                if rstep < r
-                    r = rstep
-                    active = k
-                end
-            end
-            
-        end
-        
-        # Compute chi-distribution of r
-        
-        # PROB
-        if r > 0
-            chi = chi_cdf_gamma(r, M, gm)
-            PROB += chi
-        end
-        
-        # Gradient of ProbFunction
-          
-        if r > 0
-            
-            if active > 0
-                
-                # active inequality for r
-                gradz = zeros(M, 1)
-                gradz[active] = 1
-                factor = dot(gradz', v)
-                factor = chi_pdf_gamma(r, M, gm) / factor
-                
-                # update grad_vector components
-                gradx = zeros(M, 1)
-                gradx[active] = -1
-                grad -= factor .* gradx
-                
-            end
-            
-        end
-              
+    SampleSize, M = size(SampleOnSphere)
+
+    @assert length(x) == M
+    @assert length(mu) == M
+    @assert SampleSize > 0
+
+    # The radial decomposition used here requires x - mu > 0
+    y = x .- mu
+
+    if any(y .<= 0)
+        error(
+            "ProbFunction(): x - mu must be strictly positive " *
+            "for the current radial formulation."
+        )
     end
-    
-    PROB = PROB / SampleSize
-    
-    # Value of constraint:  probLevel - Phi(u) <= 0
-    prob = PROB
-    
-    # Gradient of constraint: - Grad(Phi(u))
-    grad = grad / SampleSize
-        
-    return (prob, grad)
+
+    # Gamma-related constants used by the chi CDF/PDF functions
+    gm = [
+        loggamma(M / 2),
+        loggamma(M / 2 + 1),
+        gamma(M / 2)
+    ]
+
+    # Probability Phi(x) and its gradient
+    phi = zero(eltype(x))
+    grad_phi = zeros(eltype(x), M)
+
+    # Tolerance for zero components of v
+    vtol = sqrt(eps(Float64))
+
+    for sample in 1:SampleSize
+
+        # Always use a one-dimensional vector, not a 1 × M matrix
+        v = vec(SampleOnSphere[sample, :])
+
+        rb = Inf
+        active = 0
+
+        # Compute the radial upper bound:
+        #
+        # rb = min_k (x[k] - mu[k]) / v[k],
+        # considering only positive radial upper bounds.
+        for k in 1:M
+
+            if abs(v[k]) <= vtol
+                continue
+            end
+
+            rstep = y[k] / v[k]
+
+            if rstep > 0 && rstep < rb
+                rb = rstep
+                active = k
+            end
+        end
+
+        if isfinite(rb)
+
+            # Probability contribution for this direction
+            chi = chi_cdf_gamma(rb, M, gm)
+            phi += chi
+
+            if active != 0
+
+                # r_b = (x[active] - mu[active]) / v[active]
+                # ∂r_b / ∂x[active] = 1 / v[active]
+                pdf = chi_pdf_gamma(rb, M, gm)
+
+                grad_phi[active] += pdf / v[active]
+            end
+
+        else
+            # No finite radial upper bound: the whole radial ray is feasible
+            phi += one(eltype(x))
+        end
+    end
+
+    # Average over sampled sphere directions
+    phi /= SampleSize
+    grad_phi ./= SampleSize
+
+    return phi, grad_phi
 end
 
-#=
-	TODO
-	[ ] relax type definitions?
-	[ ] add more error and debugging hints
-=# 
-"""	
-```julia
-compute_with_SRD(w::Integer, κ::Integer, Σ::AbstractMatrix, μ::AbstractVector, s::Integer, rng)
-```
+function transform_srd_samples(
+    SampleOnSphere::AbstractMatrix,
+    κ::Integer,
+    Σ::AbstractMatrix
+    )
+    d = size(Σ, 1)
+    dim_cons = κ + 1
 
-This function computes a separable joint probability function and its gradient using 
-Spherical Radial Decomposition. It returns an array consisting of the following function in its first element:
+    @assert size(Σ) == (d, d)
+    @assert size(SampleOnSphere, 2) >=
+            dim_cons * (d - dim_cons + 1)
 
-```math
-f(x) = \\mathbb{P}(g_i (x, ξ) ≥ 0 \\quad ∀i = j, ..., j+κ),
-```
+    L = cholesky(Symmetric(Σ), check = true).L
 
-As a second element, it returns the gradient of the above function, which is computed using the Prékopa theorem as explained in Section X.
+    transformed = copy(SampleOnSphere)
 
-The function takes 6 arguments:
-* `w` - index in Σ and μ from which the joint probability applies
-* `κ` - dimension of the multivariate distribution minus 1
-* `Σ` - covariance matrix
-* `μ` - mean vector
-* `s` - sample
-* `rng` - random number generator
+    for j in 1:(d - dim_cons + 1)
+        first_col = dim_cons * (j - 1) + 1
+        last_col = first_col + dim_cons - 1
 
-If `s` and `rng` are not specified, they take the default values `s = 5000` and `rng = MersenneTwister(1234)`.
-With the latter, we fix the random number generator `rng` to guarantee the stability of the gradients in the solver iterations.
-This tempers with the precision of the computation, yet it is necessary for solver convergence, in case the probability 
-function is used in an optimization problem. 
-If the goal is only the numerical computation of the probability function without further integration into an optimization
-problem, the argument `rng` can be unfixed by passing the value `RandomDevice()`
+        Lblock = L[j:j+dim_cons-1, j:j+dim_cons-1]
+
+        for n in axes(transformed, 1)
+            v = copy(transformed[n, first_col:last_col])
+
+            norm_v = norm(v)
+            @assert norm_v > 0
+
+            v ./= norm_v
+
+            transformed[n, first_col:last_col] = (Lblock * v)'
+        end
+    end
+
+    return transformed
+end
 
 """
-function compute_with_SRD(w::Integer, κ::Integer, Σ::AbstractMatrix, μ::AbstractVector, 
-    s::Integer = 5000, rng = MersenneTwister(1234))
-    
-    #  Validate inputs
-	@assert all(u -> u > 0, (w, κ, s)) "The parameters w, κ, s should be strictly positive."
-	@assert size(Σ) == (length(μ), length(μ)) "Σ must be square and match the dimension of μ."
+```julia
+    compute_with_SRD(w, κ, transformed_samples, μ)
+```
+Compute a spherical radial decomposition (SRD) approximation of a joint
+probability and its gradient.
 
-    # Set dimension of each probability constraint
-    dim_x = length(μ)
+For the indices ``i = w, \\ldots, w+\\kappa``, the probability is
+
+```math
+f(x) = \\mathbb{P}\\bigl(x_i \\geq \\xi_i,\\; i = w, \\ldots, w+\\kappa\\bigr),
+```
+
+where the random-variable samples used in the SRD calculation are provided
+by `transformed_samples`, and ``\\mu`` is the mean vector.
+
+Returns `(f, ∇f)`, where `f` is the estimated probability and `∇f` is its
+gradient with respect to ``x``. The gradient is computed using the Prékopa
+theorem, as described in Section X.
+
+# Arguments
+- `w::Integer`: Starting index of the components in the joint event.
+- `κ::Integer`: Number of additional components in the event; the event
+  covers indices ``w, \\ldots, w+\\kappa``.
+- `transformed_samples::AbstractMatrix`: Transformed samples used by the
+  SRD calculation.
+- `μ::AbstractVector`: Mean vector used in the probability calculation.
+
+"""
+function compute_with_SRD(
+        w::Integer,
+        κ::Integer,
+        transformed_samples::AbstractMatrix,
+        μ::AbstractVector
+    )
+
+    d = length(μ)
     dim_cons = κ + 1
-    SampleSize = s
 
-    # Compute cholesky of covariance
-    L = cholesky(Σ, check=true).L
+    @assert 1 <= w <= d - κ
+    @assert size(transformed_samples, 2) >=
+            dim_cons * (d - dim_cons + 1)
 
-    # Compute Sample on the sphere
-    SampleOnSphere = randn(rng, SampleSize, dim_cons * (dim_x - dim_cons + 1))
-    # SampleOnSphere = randn(SampleSize, dim_cons * (dim_x - dim_cons + 1))
-    
-    for j in 1:dim_x-dim_cons+1
-        i = dim_cons * (j-1) + 1
-        for n = 1:SampleSize
-            # Normalize sample (projection to sphere)
-            v = SampleOnSphere[n, i:i+dim_cons-1]'
-            v = v / norm(v)
+    first_col = dim_cons * (w - 1) + 1
+    last_col = first_col + dim_cons - 1
 
-            # Transformation with cholesky of covariance
-            v = L[j:j+dim_cons-1, j:j+dim_cons-1] * v'
+    sample_window = transformed_samples[:, first_col:last_col]
+    μ_window = μ[w:w+κ]
 
-            # save result
-            SampleOnSphere[n, i:i+dim_cons-1] = v'
-        end 
+    function f(x...)
+        x_window = collect(x[w:w+κ])
+
+        return ProbFunction(
+            x_window,
+            sample_window,
+            μ_window
+        )[1]
     end
-
-    k = (1+κ) * (w-1) + 1
-
-    f(x...) = ProbFunction(vec([x[r] for r in w:w+κ]), SampleOnSphere[:, k:k+κ], μ[w:w+κ])[1]
 
     function ∇f(g::AbstractVector{T}, x::T...) where {T}
-        for i in eachindex(x)
-            if i in w:w+κ
-                g[i] = ProbFunction(vec([x[r] for r in w:w+κ]), SampleOnSphere[:, k:k+κ], μ[w:w+κ])[2][i-w+1]
-            else 
-                g[i] = 0.00000
-            end 
+        x_window = collect(x[w:w+κ])
+
+        gradient = ProbFunction(
+            x_window,
+            sample_window,
+            μ_window
+        )[2]
+
+        fill!(g, zero(T))
+
+        for i in w:(w + κ)
+            g[i] = gradient[i - w + 1]
         end
+
         return
     end
+
     return f, ∇f
-end 
+end
+
 
 #=
 	TODO
@@ -186,50 +233,100 @@ end
 =# 
 """
 ```julia
-add_JCC_SRD(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::Integer, Σ::AbstractMatrix, μ::AbstractArray, p::Float64)
+    add_JCC_SRD(model, x, idx, κ, Σ, μ, p; s=100_000, seed=1234)
 ```
 
-This function allows to add a system of joint chance constraints into a JuMP model as follows:
+Add a system of joint chance constraints to a JuMP model using spherical
+radial decomposition (SRD).
+
+For each starting index ``j \\in \\texttt{idx}``, the added constraint is
 
 ```math
-
-∀ \\quad j \\text{ in} \\quad idx:
-
-f(x) = \\mathbb{P}(g_i (x, ξ) ≥ 0 \\quad ∀i = j, ..., j+κ) ≥ p
+\\mathbb{P}\\bigl(x_i \\geq \\xi_i,\\; i = j, \\ldots, j+\\kappa\\bigr) \\geq p,
 ```
 
-To add this system of nonlinear constraints to the model, the function defines the probability function 
-computed using the spherical radial decomposition method in `compute_with_SRD` as a user-defined operator 
-and provides it also with the gradient, also computed using `compute_with_SRD.
+where ``\\xi`` is a random vector with mean ``\\mu`` and covariance matrix
+``\\Sigma``.
 
-The function takes 6 arguments:
-    * `m` - a JuMP model
-    * `x` - a vector of decision variables
-    * `idx` - set of indices that constitue the starting time of a reliability window
-    * `κ` - dimension of the multivariate distribution minus 1
-    * `Σ` - covariance matrix
-    * `μ` - mean vector
-    * `p` - probability level that has to be met
-	* `s` - sample size
-	* `rng` - random number generator
+The probability is computed using `compute_with_SRD`. The function registers
+it as a user-defined operator in the JuMP model and supplies its gradient,
+also computed using `compute_with_SRD`.
 
-The arguments `s` and `rng` are optional. If not specified, they take the default values `s = 5000` and `rng = MersenneTwister(1234)`.
-With the latter, we fix the random number generator `rng` to guarantee the stability of the gradients in the solver iterations.
-This tempers with the precision of the computation, yet it is necessary for solver convergence, in case the probability 
-function is used in an optimization problem. 
-If the goal is only the numerical computation of the probability function without further integration into an optimization
-problem, the argument `rng` can be unfixed by passing the value `RandomDevice()`.
+# Arguments
+- `model::JuMP.Model`: JuMP model to which the constraints are added.
+- `x::AbstractVector`: Decision variables used in the constraints.
+- `idx::AbstractVector`: Starting indices of the reliability windows.
+- `κ::Integer`: Number of additional components in each window; each
+  probability covers indices ``j, \\ldots, j+\\kappa``.
+- `Σ::AbstractMatrix`: Covariance matrix of ``\\xi``.
+- `μ::AbstractVector`: Mean vector of ``\\xi``.
+- `p::Real`: Minimum required probability level.
+
+# Keyword Arguments
+- `s::Integer=100_000`: Number of samples used by the SRD computation.
+- `seed::Integer=1234`: Seed used for the random-number generation. The
+  default makes the estimates repeatable across solver iterations, which
+  can help optimization converge.
 
 """
-function add_JCC_SRD(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::Integer, Σ::AbstractMatrix, μ::AbstractArray, p::Float64, 
-    s::Integer = 5000, rng = MersenneTwister(1234))
-    for j in idx
-		JuMP.register(m, Symbol("srd_prob_$j"), length(x), compute_with_SRD(j, κ, Σ, μ, s, rng)[1], 
-                    compute_with_SRD(j, κ, Σ, μ, s, rng)[2])
-        JuMP.add_nonlinear_constraint(m, :($(Symbol("srd_prob_$j"))($(x...)) >= $(p)))
+function add_JCC_SRD(
+        model::JuMP.Model,
+        x::AbstractVector,
+        idx::AbstractVector,
+        κ::Integer,
+        Σ::AbstractMatrix,
+        μ::AbstractVector,
+        p::Real;
+        s::Integer = 100_000,
+        seed::Integer = 1234
+    )
 
-		# Non-legacy reformulation:
-		# sym = add_nonlinear_operator(m, length(x), compute_with_SRD(j, κ, Σ, μ, s, rng)[1], compute_with_SRD(j, κ, Σ, μ, s, rng)[2]; name = Symbol("srd_prob_$(x)_$j"))
-        # @constraint(m, sym(x...) >= p)
+    @constraint(model, [i in eachindex(x)], x[i] >= μ[i] + 1e-8)
+
+    d = length(μ)
+    dim_cons = κ + 1
+
+    rng = MersenneTwister(seed)
+
+    # Generate raw samples exactly once
+    raw_samples = randn(
+        rng,
+        s,
+        dim_cons * (d - dim_cons + 1)
+    )
+
+    # Transform raw samples exactly once
+    transformed_samples = transform_srd_samples(
+        raw_samples,
+        κ,
+        Σ
+    )
+
+    for j in idx
+        f, ∇f = compute_with_SRD(
+            j,
+            κ,
+            transformed_samples,
+            μ
+        )
+
+        name = Symbol("srd_prob_$j")
+
+
+        # TODO update to non-legacy formulation
+        JuMP.register(
+            model,
+            name,
+            length(x),
+            f,
+            ∇f
+        )
+
+        JuMP.add_nonlinear_constraint(
+            model,
+            :($(name)($(x...)) >= $(p))
+        )
     end
+
+    return transformed_samples
 end

@@ -1,161 +1,322 @@
-#=
-	TODO
-	[ ] relax type definitions?
-	[ ] add more error and debugging hints
-=# 
-"""	
+"""
 ```julia
-compute_with_QMC(j::Integer, κ::Integer, Σ::AbstractMatrix, μ::AbstractVector, s::Integer, rng)
+    compute_with_QMC(j, κ, Σ, μ; two_sided=false, s=10_000, rng=MersenneTwister(1234))
 ```
 
-This function computes a separable joint probability function and its gradient using 
-Quasi-Monte Carlo. It returns the following function at a first position:
+Compute a quasi-Monte Carlo (QMC) approximation of a joint probability and
+its gradient.
+
+Let ``\\xi`` be a random vector with mean ``\\mu`` and covariance matrix
+``\\Sigma``. For the indices ``i = j, \\ldots, j+\\kappa``, the one-sided
+probability is
 
 ```math
-f(x) = \\mathbb{P}(g_i (x, ξ) ≥ 0 \\quad ∀i = j, ..., j+κ),
+f(x) = \\mathbb{P}\\bigl(x_i \\geq \\xi_i,\\; i = j, \\ldots, j+\\kappa\\bigr).
 ```
 
-In a second position, it returns the gradient of the above function, which is computed using the Prékopa theorem as explained in Section X.
+When `two_sided=true`, the probability is computed using the corresponding
+two-sided inequalities.
 
-The function takes 6 arguments:
-* `j` - index in Σ and μ from which the joint probability applies
-* `κ` - dimension of the multivariate distribution minus 1
-* `Σ` - covariance matrix
-* `μ` - mean vector
-* `two_sided` - boolean to describe if the probability function at hand had a two-sided inequality
-* `s` - sample size
-* `rng` - random number generator
+Returns `(f, ∇f)`, where `f` is the estimated probability and `∇f` is its
+gradient with respect to ``x``. The gradient is computed using the Prékopa
+theorem, as described in Section X.
 
-The argument `two_sided` has the default value `false`.
+# Arguments
+- `j::Integer`: Starting index of the components in ``\\Sigma`` and ``\\mu``.
+- `κ::Integer`: Number of additional components. The joint event includes
+  indices ``j, \\ldots, j+\\kappa``.
+- `Σ::AbstractMatrix`: Covariance matrix of ``\\xi``.
+- `μ::AbstractVector`: Mean vector of ``\\xi``.
 
-If `s` and `rng` are not specified, they take the default values `s = 5000` and `rng = MersenneTwister(1234)`.
-With the latter, we fix the random number generator `rng` to guarantee the stability of the gradients in the solver iterations.
-This tempers with the precision of the computation, yet it is necessary for solver convergence, in case the probability 
-function is used in an optimization problem. 
-If the goal is only the numerical computation of the probability function without further integration into an optimization
-problem, the argument `rng` can be unfixed by passing the value `RandomDevice()`.
+# Keyword Arguments
+- `two_sided::Bool=false`: Whether to use two-sided inequalities.
+- `s::Integer=10_000`: Number of QMC samples.
+- `rng=MersenneTwister(1234)`: Random number generator for sampling. The
+  fixed default seed makes estimates repeatable across solver iterations,
+  which can help optimization converge. For standalone probability
+  evaluation with a non-fixed random source, pass `RandomDevice()`.
 
 """
-function compute_with_QMC(j::Integer, κ::Integer, Σ::AbstractMatrix, μ::AbstractVector, 
-	two_sided::Bool = false, s::Integer = 5000, rng = MersenneTwister(1234))
-	
-	# Validate inputs
-	@assert all(v -> v > 0, (j, κ, s)) "The parameters j, κ, s should be strictly positive."
-	@assert size(Σ) == (length(μ), length(μ)) "Σ must be square with the same dimension as μ."
 
-	idx = j:j+κ
-	Σ_j = Σ[idx, idx]
-	μ_j = μ[idx]
-	a_j = fill(-Inf, κ+1)
-  
-	if two_sided
-	    f1(x...) = mvnormcdf(Σ_j, vec([x[i] for i in idx]) - μ_j, # collect(x[idx])
-                    vec([x[i + length(x) ÷ 2] for i in idx]) - μ_j, 
-                    m = s, rng = rng)[1]
-		f = f1
-		e1(x...) = mvnormcdf(Σ_j, vec([x[i] for i in idx]) - μ_j,
-			vec([x[i + length(x) ÷ 2] for i in idx]) - μ_j, 
-			m = s, rng = rng)[2]
-	    e = e1
-	else
-		f2(x...) = mvnormcdf(Σ_j, a_j - μ_j,
-			vec([x[i] for i in idx]) - μ_j, 
-			m = s, rng = rng)[1]
-		f = f2
-		e2(x...) = mvnormcdf(Σ_j, a_j - μ_j, 
-			vec([x[i] for i in idx]) - μ_j, 
-			m = s, rng = rng)[2]
-		e = e2
-	end 
+function compute_with_QMC(
+    j::Integer,
+    κ::Integer,
+    Σ::AbstractMatrix,
+    μ::AbstractVector;
+    two_sided::Bool = false,
+    s::Integer = 10_000,
+    rng = MersenneTwister(1234),
+)
 
-	@assert e != 0 "Numerical issues detected! Results could be unstable or wrong. One of the reasons can be an ill-conditioned Σ matrix"
+    # ------------------------------------------------------------------
+    # Validate inputs
+    # ------------------------------------------------------------------
 
-	norm_pdf(k) = exp(-(k^2) / 2) / (2 * pi)^0.5
+    @assert j >= 1 "j must be positive."
+    @assert κ >= 0 "κ must be nonnegative."
+    @assert s > 0 "s must be positive."
 
-    function ∇f(g::AbstractVector{T}, x::T...) where {T}
-		idx = j:j+κ
-		Σ_j = Σ[idx, idx]
-		μ_j = μ[idx]
-		a_j = fill(-Inf, κ+1)
-		σ_j = sqrt.(diag(Σ_j, 0))
+    n = length(μ)
 
-		for o in eachindex(x)
-			# i = mod1(o, κ+1) # Adjust index for both sides if two_sided
-			i = (o <= length(x) ÷ 2) ? o : o - length(x) ÷ 2
+    @assert size(Σ) == (n, n) "Σ must be square and match μ."
 
-			if i in idx
-				Σ_inv = inv(Σ_j[i-j+1, i-j+1])
-				Σ_new = Σ_j - Σ_inv * Σ_j[i-j+1, :] * Σ_j[i-j+1, :]'
-				μ_new = μ_j + Σ_inv * (x[o] - μ_j[i-j+1]) * Σ_j[i-j+1, :]
+    idx = j:(j + κ)
+    @assert first(idx) >= 1 && last(idx) <= n "j + κ exceeds dimension."
 
-				sign_factor = ifelse(two_sided && o <= length(x) ÷ 2, -1, 1)
+    q = length(idx)
 
-				g[o] = sign_factor * norm_pdf((x[o] - μ_j[i-j+1]) / σ_j[i-j+1]) / σ_j[i-j+1] *
-									 mvnormcdf(Σ_new[1:end .!= i-j+1, 1:end .!= i-j+1], 
-											   two_sided ? vec([x[k] for k in idx if k != i])-μ_new[1:end .!=i-j+1] : a_j[1:end .!=i-j+1]-μ_new[1:end .!=i-j+1],
-											   two_sided ? vec([x[k + length(x) ÷ 2] for k in idx if k != i]) - μ_new[1:end .!= i-j+1] : vec([x[k] for k in idx if k != i])-μ_new[1:end .!=i-j+1], # TODO indexing here is not generalized  
-											   m = s, rng = rng)[1]
-			else
-				g[o] = 1e-10
-			end
-		end
-		
-		return
-	end
-	return f, ∇f
+    Σj = Matrix(Σ[idx, idx])
+    μj = collect(μ[idx])
+
+    # Check that the covariance block is usable
+    @assert isfinite.(Σj) |> all "Σ contains non-finite values."
+    @assert isfinite.(μj) |> all "μ contains non-finite values."
+
+    # This will throw an error if Σj is not positive definite
+    F = cholesky(Symmetric(Σj))
+
+    # ------------------------------------------------------------------
+    # Use a deterministic RNG stream for each function evaluation.
+    #
+    # This is important for nonlinear optimization: the function should
+    # not change randomly when evaluated at the same x.
+    # ------------------------------------------------------------------
+
+    function local_rng()
+        return deepcopy(rng)
+    end
+
+    # ------------------------------------------------------------------
+    # Standard normal density
+    # ------------------------------------------------------------------
+
+    normal_pdf(z) = exp(-0.5 * z^2) / sqrt(2π)
+
+    # ------------------------------------------------------------------
+    # Extract the relevant components of x
+    # ------------------------------------------------------------------
+
+    function get_bounds(x)
+        xvec = collect(x)
+
+        if two_sided
+            @assert length(xvec) == 2q
+
+            lower = collect(view(xvec, 1:q))
+            upper = collect(view(xvec, q + 1:2q))
+
+            return lower, upper
+        else
+            @assert length(xvec) >= last(idx)
+
+            upper = collect(view(xvec, idx))
+            lower = fill(-Inf, q)
+
+            return lower, upper
+        end
+    end
+
+    # ------------------------------------------------------------------
+    # Probability function
+    # ------------------------------------------------------------------
+
+    function f(x...)
+        lower, upper = get_bounds(x)
+
+        # Convert bounds to deviations from μ
+        lower_dev = lower .- μj
+        upper_dev = upper .- μj
+
+        result = mvnormcdf(
+            Σj,
+            lower_dev,
+            upper_dev;
+            m = s,
+            rng = local_rng(),
+        )
+
+        return result[1]
+    end
+
+    # ------------------------------------------------------------------
+    # Conditional multivariate normal CDF
+    #
+    # Computes the probability of all remaining variables being within
+    # [lower, upper], conditional on variable r equaling x_r.
+    # ------------------------------------------------------------------
+
+    function conditional_cdf(
+        lower,
+        upper,
+        r::Int,
+        xr,
+    )
+        keep = [k for k in 1:q if k != r]
+
+        # If q == 1, there are no remaining variables
+        if isempty(keep)
+            return 1.0
+        end
+
+        σrr = Σj[r, r]
+
+        @assert σrr > 0 "Σ[$r,$r] must be positive."
+
+        σr = Σj[keep, r]
+        Σcond = Σj[keep, keep] - (σr * transpose(σr)) / σrr
+
+        μcond = μj[keep] .+ (σr / σrr) .* (xr - μj[r])
+
+        lower_cond = lower[keep] .- μcond
+        upper_cond = upper[keep] .- μcond
+
+        return mvnormcdf(
+            Σcond,
+            lower_cond,
+            upper_cond;
+            m = s,
+            rng = local_rng(),
+        )[1]
+    end
+
+    # ------------------------------------------------------------------
+    # Gradient
+    # ------------------------------------------------------------------
+
+    function ∇f(g::AbstractVector, x...)
+        lower, upper = get_bounds(x)
+
+        # Ensure the gradient is initialized everywhere
+        fill!(g, zero(eltype(g)))
+
+        for r in 1:q
+
+            σr = sqrt(Σj[r, r])
+
+            # Derivative with respect to the upper bound
+            upper_conditional = conditional_cdf(
+                lower,
+                upper,
+                r,
+                upper[r],
+            )
+
+            upper_derivative =
+                normal_pdf((upper[r] - μj[r]) / σr) / σr *
+                upper_conditional
+
+            if two_sided
+                # First q variables are lower bounds
+                # Last q variables are upper bounds
+
+                g[q + r] += upper_derivative
+            else
+                # The first q variables are upper bounds at positions idx[r]
+                g[idx[r]] += upper_derivative
+            end
+
+            if two_sided
+
+                # Derivative with respect to the lower bound.
+                # It has a negative sign because increasing the lower
+                # bound reduces the probability.
+                lower_conditional = conditional_cdf(
+                    lower,
+                    upper,
+                    r,
+                    lower[r],
+                )
+
+                lower_derivative =
+                    normal_pdf((lower[r] - μj[r]) / σr) / σr *
+                    lower_conditional
+
+                g[r] -= lower_derivative
+            end
+        end
+
+        return
+    end
+
+    return f, ∇f
 end
 
 #=
 	TODO
 	[ ] debug non-legacy formulation (see below)
+    [ ] Multiple windows. If idx has more than one entry, 
+        every window currently receives the same full x. 
+        In two-sided mode that only makes sense for a single window. 
+        For several windows, each needs its own 2q slice.
 =# 
+
 """
 ```julia
-add_JCC_QMC(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::Integer, Σ::AbstractMatrix, μ::AbstractArray, p::Float64)
+    add_JCC_QMC(m, x, idx, κ, Σ, μ, p; two_sided=false, s=10_000, rng=MersenneTwister(1234))
 ```
+Add a system of joint chance constraints to a JuMP model.
 
-This function allows to add a system of joint chance constraints into a JuMP model as follows:
+For each starting index ``j \\in \\texttt{idx}``, the added constraint is
 
 ```math
-∀ \\quad j \\text{ in} \\quad idx:
-
-f(x) = \\mathbb{P}(g_i (x, ξ) ≥ 0 \\quad ∀i = j, ..., j+κ) ≥ p
+\\mathbb{P}\\bigl(x_i \\geq \\xi_i,\\; i = j, \\ldots, j+\\kappa\\bigr) \\geq p,
 ```
-To add this system of nonlinear constraints to the model, the function defines the probability function 
-computed using the quasi-monte-carlo method in `compute_with_QMC` as a user-defined operator 
-and provides it also with the gradient, also computed using `compute_with_QMC.
 
-The function takes 6 arguments:
-	* `m` - a JuMP model
-	* `x` - a vector of decision variables
-	* `idx` - set of indices that constitue the starting time of a reliability window
-	* `κ` - dimension of the multivariate distribution minus 1
-	* `Σ` - covariance matrix
-	* `μ` - mean vector
-	* `p` - probability level that has to be met
-	* `two_sided` - boolean to describe if the probability function at hand had a two-sided inequality
-	* `s` - sample size
-	* `rng` - random number generator
+where ``\\xi`` is a random vector with mean ``\\mu`` and covariance matrix
+``\\Sigma``. When `two_sided=true`, the probability uses the corresponding
+two-sided inequalities.
 
-The argument `two_sided` is optional and has the default value `false`.
+The probability is approximated using quasi-Monte Carlo (QMC). The function
+registers it as a user-defined operator in the JuMP model and supplies the
+gradient computed by `compute_with_QMC`.
 
-The arguments `s` and `rng` are optional. If not specified, they take the default values `s = 5000` and `rng = MersenneTwister(1234)`.
-With the latter, we fix the random number generator `rng` to guarantee the stability of the gradients in the solver iterations.
-This tempers with the precision of the computation, yet it is necessary for solver convergence, in case the probability 
-function is used in an optimization problem. 
-If the goal is only the numerical computation of the probability function without further integration into an optimization
-problem, the argument `rng` can be unfixed by passing the value `RandomDevice()`.
+# Arguments
+- `m::JuMP.Model`: JuMP model to which the constraints are added.
+- `x::AbstractVector`: Decision variables used in the constraints.
+- `idx::AbstractArray`: Starting indices of the reliability windows.
+- `κ::Integer`: Number of additional components in each window; each
+  probability covers indices ``j, \\ldots, j+\\kappa``.
+- `Σ::AbstractMatrix`: Covariance matrix of ``\\xi``.
+- `μ::AbstractArray`: Mean vector of ``\\xi``.
+- `p::Float64`: Minimum required probability level.
+
+# Keyword Arguments
+- `two_sided::Bool=false`: Whether to use two-sided inequalities.
+- `s::Integer=10_000`: Number of QMC samples.
+- `rng=MersenneTwister(1234)`: Random number generator for QMC sampling.
+  The fixed default seed makes estimates repeatable across solver iterations,
+  which can help optimization converge. For standalone probability
+  evaluation with a non-fixed random source, pass `RandomDevice()`.
 
 """
-function add_JCC_QMC(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::Integer, Σ::AbstractMatrix, μ::AbstractArray, p::Float64, 
-	two_sided::Bool = false, s::Integer = 5000, rng = MersenneTwister(1234))
-    for j in idx
-		JuMP.register(m, Symbol("mvncdf_$j"), length(x), compute_with_QMC(j, κ, Σ, μ, two_sided, s, rng)[1], 
-					compute_with_QMC(j, κ, Σ, μ, two_sided, s, rng)[2])
-		JuMP.add_nonlinear_constraint(m, :($(Symbol("mvncdf_$j"))($(x...)) >= $(p)))
+function add_JCC_QMC(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::Integer, 
+                     Σ::AbstractMatrix, μ::AbstractArray, p::Float64; 
+	                 two_sided::Bool = false, s::Integer = 10_000, rng = MersenneTwister(1234))
 
-		# Non-legacy reformulation:
-		# sym = add_nonlinear_operator(m, length(x), compute_with_QMC(j, κ, Σ, μ, two_sided, s, rng)[1], compute_with_QMC(j, κ, Σ, μ, two_sided, s, rng)[2]; name = Symbol("mvncdf_$j"))
-        # @constraint(m, sym(x...) >= p)
+    @assert s > 0 "ERROR: s=$s must be positive (check keyword passing)"
+
+    for j in idx
+		f, ∇f = compute_with_QMC(j, κ, Σ, μ; two_sided = two_sided, s = s, rng = rng)
+		JuMP.register(m, Symbol("mvncdf_$j"), length(x), f, ∇f)	
+		JuMP.add_nonlinear_constraint(m, :($(Symbol("mvncdf_$j"))($(x...)) >= $(p)))
 	end
 end
+
+# TODO non-legacy formulation to be updated with correct version of JuMP
+# function add_JCC_QMC(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::Integer,
+#                      Σ::AbstractMatrix, μ::AbstractArray, p::Float64;
+#                      two_sided::Bool = false, s::Integer = 10_000, rng = MersenneTwister(1234))
+#     @assert s > 0 "ERROR: s=$s must be positive (check keyword passing)"
+
+#     for j in idx
+#         f, ∇f = compute_with_QMC(j, κ, Σ, μ; two_sided = two_sided, s = s, rng = rng)
+
+#         op = JuMP.add_nonlinear_operator(
+#             m, length(x), f, ∇f;
+#             name = Symbol("mvncdf_$j"),
+#         )
+
+#         JuMP.@constraint(m, op(x...) >= p)
+#     end
+#     return
+# end
