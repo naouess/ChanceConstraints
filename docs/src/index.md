@@ -2,26 +2,6 @@
 
 _A package for computing and optimizing with Joint Chance Constraints in Julia._
 
-```@contents
-Pages = ["index.md"]
-```
-
-## Install 
-```julia repl
-# pkg> add ChanceConstraints
-```
-
-## Resources for getting started
-
-Here some math stuff \
-Some JuMP and Julia stuff \
-Refer to our paper in Annals of OR
-
-## The math behind it all
-
-Here we explain Chance constraints 
-
-
 `ChanceConstraints.jl` adds **joint chance constraints** with Gaussian uncertainty to [JuMP](https://jump.dev) models. It computes the joint probability and its gradient directly, instead of relying on conservative approximations.
 
 ## Getting started
