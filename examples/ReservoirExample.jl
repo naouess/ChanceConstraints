@@ -32,9 +32,36 @@ cumx = [sum(x[1:t]) for t in 1:T]
 
 # level_t ≥ l_min  ⇔  -ξ_t ≤ l_0 - l_min - cumx_t,  and  -ξ ~ N(-μ, Σ)
 slack = [l_0 - l_min - cumx[t] for t in 1:T]
+μ_negative = -μ
 
 # One reliability window starting at period 1 and spanning all T periods (κ = T - 1)
-add_JCC_QMC(model, slack, [1], T - 1, Σ, -μ, p)
+add_JCC_QMC(model, slack, [1], T - 1, Σ, μ_negative, p)
+
+optimize!(model)
+
+x_one = value.(x)
+objective_value(model) # ≈ 28.43  (only the total is pinned down; the split over periods is not)
+
+# ---------------------------------------------------------------
+# Single-sided SRD: only the lower bound  level_t ≥ l_min  matters
+# ---------------------------------------------------------------
+
+model = Model(Ipopt.Optimizer)
+set_silent(model)
+
+@variable(model, 0 <= x[1:T] <= 30)
+set_start_value.(x, 9.0)
+
+@objective(model, Max, sum(x))
+
+cumx = [sum(x[1:t]) for t in 1:T]
+
+# level_t ≥ l_min  ⇔  -ξ_t ≤ l_0 - l_min - cumx_t,  and  -ξ ~ N(-μ, Σ)
+slack = [l_0 - l_min - cumx[t] for t in 1:T]
+μ_negative = -μ
+
+# One reliability window starting at period 1 and spanning all T periods (κ = T - 1)
+add_JCC_SRD(model, slack, [1], T - 1, Σ,  μ_negative, p)
 
 optimize!(model)
 
@@ -67,7 +94,7 @@ add_JCC_QMC(model, vcat(lower, upper), [1], T - 1, Σ, μ, p; two_sided = true)
 optimize!(model)
 
 x_two = value.(x)
-objective_value(model) # ≈ 28.35, slightly below the single-sided value
+objective_value(model) # ≈ 28.39, slightly below the single-sided value
 
 
 # ---------------------------------------------------------------
