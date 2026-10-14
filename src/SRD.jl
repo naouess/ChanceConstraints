@@ -31,10 +31,9 @@ function ProbFunction(x, SampleOnSphere, mu)
     @assert length(mu) == M
     @assert SampleSize > 0
 
-    # The radial decomposition used here requires x - mu > 0
     y = x .- mu
 
-    if any(y .<= 0)
+    if any(y .<= 1e-10) 
         error(
             "ProbFunction(): x - mu must be strictly positive " *
             "for the current radial formulation."
@@ -227,10 +226,6 @@ function compute_with_SRD(
 end
 
 
-#=
-	TODO
-	[ ] debug non-legacy formulation (see below)
-=# 
 """
 ```julia
     add_JCC_SRD(model, x, idx, κ, Σ, μ, p; s=100_000, seed=1234)
@@ -310,22 +305,13 @@ function add_JCC_SRD(
             μ
         )
 
-        name = Symbol("srd_prob_$j")
-
-
-        # TODO update to non-legacy formulation
-        JuMP.register(
-            model,
-            name,
-            length(x),
-            f,
-            ∇f
+        op = JuMP.add_nonlinear_operator(
+            model, length(x), f, ∇f;
+            name = Symbol("srd_prob_$j"),
         )
 
-        JuMP.add_nonlinear_constraint(
-            model,
-            :($(name)($(x...)) >= $(p))
-        )
+        @constraint(model, op(x...) >= p)
+
     end
 
     return transformed_samples

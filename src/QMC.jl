@@ -242,7 +242,6 @@ end
 
 #=
 	TODO
-	[ ] debug non-legacy formulation (see below)
     [ ] Multiple windows. If idx has more than one entry, 
         every window currently receives the same full x. 
         In two-sided mode that only makes sense for a single window. 
@@ -295,27 +294,14 @@ function add_JCC_QMC(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::I
     @assert s > 0 "ERROR: s=$s must be positive (check keyword passing)"
 
     for j in idx
-		f, ∇f = compute_with_QMC(j, κ, Σ, μ; two_sided = two_sided, s = s, rng = rng)
-		JuMP.register(m, Symbol("mvncdf_$j"), length(x), f, ∇f)	
-		JuMP.add_nonlinear_constraint(m, :($(Symbol("mvncdf_$j"))($(x...)) >= $(p)))
-	end
+        f, ∇f = compute_with_QMC(j, κ, Σ, μ; two_sided = two_sided, s = s, rng = rng)
+
+        op = JuMP.add_nonlinear_operator(
+            m, length(x), f, ∇f;
+            name = Symbol("mvncdf_$j"),
+        )
+
+        @constraint(m, op(x...) >= p)
+    end
+    return
 end
-
-# TODO non-legacy formulation to be updated with correct version of JuMP
-# function add_JCC_QMC(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::Integer,
-#                      Σ::AbstractMatrix, μ::AbstractArray, p::Float64;
-#                      two_sided::Bool = false, s::Integer = 10_000, rng = MersenneTwister(1234))
-#     @assert s > 0 "ERROR: s=$s must be positive (check keyword passing)"
-
-#     for j in idx
-#         f, ∇f = compute_with_QMC(j, κ, Σ, μ; two_sided = two_sided, s = s, rng = rng)
-
-#         op = JuMP.add_nonlinear_operator(
-#             m, length(x), f, ∇f;
-#             name = Symbol("mvncdf_$j"),
-#         )
-
-#         JuMP.@constraint(m, op(x...) >= p)
-#     end
-#     return
-# end
