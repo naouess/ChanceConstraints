@@ -10,23 +10,19 @@ This page shows `ChanceConstraints.jl` in use, from minimal examples to a full c
 
 ## Simple example
 
-A joint chance constraint requires that *all* components of a random vector are
-satisfied simultaneously with probability at least `p`. This example
-illustrates the minimal workflow for that case.
+A joint chance constraint requires that *all* components of a random vector are satisfied simultaneously with probability at least `p`. This example illustrates the minimal workflow for that case.
 
-**Problem.** Find the cheapest `x` such that
+**Problem.** Find the cheapest `x` with unit costs `c` such that
 
 ```math
 \mathbb{P}(\xi \le x) \ge p, \qquad \xi \sim \mathcal{N}(\mu, \Sigma), \quad p = 0.9,
 ```
 
-with unit costs `c`. The covariance `Σ` has non-zero
-off-diagonal entries, so the components are correlated and the joint
-probability cannot be split into independent per-component constraints.
+The covariance `Σ` has non-zero off-diagonal entries, so the components are correlated and the joint probability cannot be split into independent per-component constraints.
 
 **What the example shows.**
 
-1. Building a JuMP model and adding the joint chance constraint with
+1. Building a JuMP model and adding the joint chance constraint with 
    `add_JCC_QMC`, which uses quasi-Monte Carlo to approximate the probability.
 2. Solving the same problem with `add_JCC_SRD`, which uses spherical-radial
    decomposition.
@@ -44,42 +40,37 @@ Markdown.parse("```julia\n" * code * "\n```")
 ## Reservoir problem example
 
 ### Joint-chance-constrained formulation
-A hydropower operator chooses how much water to release from a reservoir in
-each of `T` periods. Releases generate revenue, but the water level must stay
-within safe limits in **every** period. Because inflows are uncertain, the
-requirement is stated as a joint chance constraint: the level must stay within
-its bounds in all periods *simultaneously* with probability at least `p`.
+A hydropower operator chooses how much water to release from a reservoir in each of `T` periods. Releases generate revenue, but the water level must stay within safe limits in **every** period. Because inflows are uncertain, the requirement is stated as a joint chance constraint: the level must stay within its bounds in all periods *simultaneously* with probability at least `p`.
 
 #### Model
 
-Let `x_t` be the release in period `t` and `ξ_t` the cumulative inflow up to
-period `t`. The water level is
+Let `x[t]` be the release in period `t` and `ξ[t]` the cumulative inflow up to period `t`. The water level is
 
 ```math
 \ell_t = \ell_0 + \xi_t - \sum_{s=1}^{t} x_s .
 ```
 
-The cumulative inflow is `ξ ~ N(μ, Σ)`. It is built from independent yearly
-inflows with means `β_t` and variances `σ²_t`, so
+The cumulative inflow is `ξ ~ N(μ, Σ)`. It is built from independent yearly inflows with means `β_t` and variances `σ²_t`, so
 
 ```math
 \mu_t = \sum_{s=1}^{t} \beta_s, \qquad
 \Sigma_{ij} = \sum_{s=1}^{\min(i,j)} \sigma^2_s .
 ```
 
-The cumulative sums make the levels strongly correlated across periods, which
-is why the constraints must be treated jointly. The problem is
+The cumulative sums make the levels strongly correlated across periods, which is why the constraints must be treated jointly. 
+
+The optimization problem is
 
 ```math
 \max_{x} \; \sum_{t=1}^{T} x_t
 \quad \text{s.t.} \quad
-\mathbb{P}\big(\ell_{\min} \le \ell_t \le \ell_{\max},\; t = 1,\dots,T\big) \ge p.
+\mathbb{P}\big(\ell_{\min} \le \ell_t \le \ell_{\max},\; t = 1,\dots,T\big) \ge p,
+\qquad x_{min} \le x_t \le x_{max} .
 ```
 
 #### Writing it as a joint chance constraint
 
-`add_JCC_QMC` and `add_JCC_SRD` handle constraints of the form `P(ζ ≤ x) ≥ p` with `ζ ~ N(μ, Σ)`, so the level constraints are
-rewritten in that form.
+`add_JCC_QMC` and `add_JCC_SRD` handle constraints of the form `P(ζ ≤ x) ≥ p` with `ζ ~ N(μ, Σ)`, so the level constraints are rewritten in that form.
 
 **Single-sided (lower bound only).** The constraint `ℓ_t ≥ ℓ_min` is equivalent to
 
@@ -115,7 +106,7 @@ add_JCC_QMC(model, vcat(lower, upper), [1], T - 1, Σ, μ, p; two_sided = true)
 
 #### What the example shows
 
-1. **Single-sided, QMC and SRD.** Both approximations give the same optimal total release of.
+1. **Single-sided, QMC and SRD.** Both approximations give the same optimal total release.
 2. **Two-sided, QMC.** Adding the upper bound makes the problem slightly more
    restrictive. Two-sided implementation is currently not possible using SRD.
 3. **Monte Carlo check.** The probability that the level stays within bounds
@@ -130,15 +121,13 @@ Markdown.parse("```julia\n" * code * "\n```")
 
 ### Individual-chance-constrained formulation
 
-Instead of requiring the level to stay in bounds in all periods jointly, each
-period is constrained on its own:
+Instead of requiring the level to stay in bounds in all periods jointly, each period is constrained on its own:
 
 ```math
 \mathbb{P}(\ell_t \ge \ell_{\min}) \ge p, \qquad t = 1,\dots,T .
 ```
 
-This ignores the correlation between periods. Because each `ξ_t` is a scalar
-Gaussian, `ξ_t ~ N(μ_t, Σ_tt)`, every constraint has a closed form. With
+This ignores the correlation between periods. Because each `ξ_t` is a scalar Gaussian, `ξ_t ~ N(μ_t, Σ_tt)`, every constraint has a closed form. With
 `z_p = Φ⁻¹(p)` and `σ_t = √Σ_tt`:
 
 ```math
@@ -190,18 +179,13 @@ upper = [l_max - l_0 + cumx[t] for t in 1:T]
     Φ((upper[t] - μ[t]) / σ[t]) - Φ((lower[t] - μ[t]) / σ[t]) >= p)
 ```
 
-(Start values matter here too. If your JuMP version does not accept `erf`
-directly, register it with `@operator`.)
-
-**Checking the joint probability.** Reuse the Monte Carlo check from the
-joint example on `x_ind`:
+**Checking the joint probability.** Reuse the Monte Carlo check from the joint example on `x_ind`:
 
 ```julia
 mean(all(level(x_ind) .>= l_min; dims = 1))
 ```
 
-Each period satisfies its own constraint with probability `p`, but the
-probability that *all* periods are satisfied together is generally lower than
-`p`. That gap is what the joint formulation closes.
+Each period satisfies its own constraint with probability `p`, but the probability that *all* periods are satisfied together is generally lower than `p`. That gap is what the joint formulation closes.
 
 ## Financial portfolio example
+

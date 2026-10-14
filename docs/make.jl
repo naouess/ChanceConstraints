@@ -8,7 +8,8 @@ makedocs(
                 "Home" => "index.md",
                 "Individual Chance Contraints" => "icc.md",
                 "Joint Chance Contraints" => "jcc.md",
-                "Examples" => "examples.md"
+                "Examples" => "examples.md",
+                "Practical tips" => "tips.md"
                ])
                
 deploydocs(;
