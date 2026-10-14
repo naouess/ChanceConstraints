@@ -34,7 +34,7 @@ value.(x)              # ≈ [7.71, 4.74, 6.47, 5.63]
 model = Model(Ipopt.Optimizer)
 set_silent(model)
 
-@variable(model, x[i = 1:4])
+@variable(model, x[i = 1:4] >= 0.0)
 set_start_value.(x, [9.0, 11.45, 9.0, 9.0])
 
 @objective(model, Min, c'x)
