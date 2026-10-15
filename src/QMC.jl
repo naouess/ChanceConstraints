@@ -52,12 +52,8 @@ function compute_with_QMC(
     # ------------------------------------------------------------------
 
     @assert j >= 1 "j must be positive."
-    @assert κ >= 0 "κ must be nonnegative."
-    @assert s > 0 "s must be positive."
 
     n = length(μ)
-
-    @assert size(Σ) == (n, n) "Σ must be square and match μ."
 
     idx = j:(j + κ)
     @assert first(idx) >= 1 && last(idx) <= n "j + κ exceeds dimension."
@@ -291,7 +287,19 @@ function add_JCC_QMC(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::I
                      Σ::AbstractMatrix, μ::AbstractArray, p::Float64; 
 	                 two_sided::Bool = false, s::Integer = 10_000, rng = MersenneTwister(1234))
 
-    @assert s > 0 "ERROR: s=$s must be positive (check keyword passing)"
+    # ------------------------------------------
+    # Validate inputs 
+    # ------------------------------------------
+    @assert κ >= 1 "The duration of an outage κ must be nonnegative and higher than 1." # TODO check here
+    @assert s > 0 "The number of sample s must be positive."
+    @assert size(Σ) == (length(μ), length(μ)) "Σ must be square and match μ."
+    @assert 0.0 <= p <= 1.0 "The probability p must be between 0 and 1"
+    @assert first(idx) >= 1 && last(idx) + κ <= length(x) "idx .+ κ exceeds dimension."
+
+    # Check that the covariance is usable
+    @assert isfinite.(Σ) |> all "Σ contains non-finite values."
+    @assert isfinite.(μ) |> all "μ contains non-finite values."
+    @assert isposdef(Σ) "Σ is not positive definite"
 
     for j in idx
         f, ∇f = compute_with_QMC(j, κ, Σ, μ; two_sided = two_sided, s = s, rng = rng)

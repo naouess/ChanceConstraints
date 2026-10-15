@@ -276,6 +276,20 @@ function add_JCC_SRD(
         seed::Integer = 1234
     )
 
+    # ------------------------------------------
+    # Validate inputs 
+    # ------------------------------------------
+    @assert κ >= 1 "The duration of an outage κ must be nonnegative and higher than 1." # TODO check here
+    @assert s > 0 "The number of sample s must be positive."
+    @assert size(Σ) == (length(μ), length(μ)) "Σ must be square and match μ."
+    @assert 0.5 <= p <= 1.0 "The probability p must be between 0.5 and 1"
+    @assert first(idx) >= 1 && last(idx) + κ <= length(x) "idx .+ κ exceeds dimension."
+
+    # Check that the covariance is usable
+    @assert isfinite.(Σ) |> all "Σ contains non-finite values."
+    @assert isfinite.(μ) |> all "μ contains non-finite values."
+    @assert isposdef(Σ) "Σ is not positive definite"
+
     @constraint(model, [i in eachindex(x)], x[i] >= μ[i] + 1e-8)
 
     d = length(μ)
