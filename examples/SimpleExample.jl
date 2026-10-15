@@ -28,7 +28,6 @@ value.(x)              # ≈ [7.71, 4.74, 6.47, 5.63]
 
 # ---------------------------------------------------------------
 # The same problem with spherical-radial decomposition (SRD).
-# SRD needs the mean to be strictly feasible: x ≥ μ + δ
 # ---------------------------------------------------------------
 
 model = Model(Ipopt.Optimizer)

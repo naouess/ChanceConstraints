@@ -7,11 +7,12 @@ using Main.ChanceConstraints, Ipopt
 # in all periods jointly with probability p.
 
 T = 3
-l_0, l_min, l_max = 5.0, 5.0, 10.0
+l_0, l_min, l_max = 5.0, 5.0, 12.0
 p = 0.9
+price = [3.0, 2.0, 1.0]                  # decreasing: releasing early pays more
 
-β_mean = fill(10.0, T)   # independent yearly inflows with these means …
-β_var  = fill(0.5, T)    # … and variances
+β_mean = fill(10.0, T)                   # independent yearly inflows with these means …
+β_var  = fill(0.9, T)                    # … and variances
 μ = cumsum(β_mean)
 Σ = [sum(β_var[1:min(i, j)]) for i in 1:T, j in 1:T]
 
@@ -26,7 +27,7 @@ set_silent(model)
 @variable(model, 0 <= x[1:T] <= 30)
 set_start_value.(x, 9.0)
 
-@objective(model, Max, sum(x))
+@objective(model, Max, sum(price[t] * x[t] for t in 1:T))
 
 cumx = [sum(x[1:t]) for t in 1:T]
 
@@ -39,20 +40,21 @@ add_JCC_QMC(model, slack, [1], T - 1, Σ, μ_negative, p)
 
 optimize!(model)
 
-x_one = value.(x)
-objective_value(model) # ≈ 28.43  (only the total is pinned down; the split over periods is not)
+x_one = value.(x)       # ≈ [8.27, 9.59, 9.57]
+objective_value(model)  # ≈ 53.57
 
 # ---------------------------------------------------------------
 # Single-sided SRD: only the lower bound  level_t ≥ l_min  matters
 # ---------------------------------------------------------------
 
 model = Model(Ipopt.Optimizer)
+set_optimizer_attribute(model, "tol", 1e-5)
 set_silent(model)
 
 @variable(model, 0 <= x[1:T] <= 30)
 set_start_value.(x, 9.0)
 
-@objective(model, Max, sum(x))
+@objective(model, Max, sum(price[t] * x[t] for t in 1:T))
 
 cumx = [sum(x[1:t]) for t in 1:T]
 
@@ -65,9 +67,8 @@ add_JCC_SRD(model, slack, [1], T - 1, Σ,  μ_negative, p)
 
 optimize!(model)
 
-x_one = value.(x)
-objective_value(model) # ≈ 28.43  (only the total is pinned down; the split over periods is not)
-
+x_oneSRD = value.(x)        # ≈ [8.27, 9.59, 9.57]
+objective_value(model)      # ≈ 53.57
 
 # ---------------------------------------------------------------
 # Two-sided QMC: lower AND upper bound, l_min ≤ level_t ≤ l_max
@@ -79,7 +80,7 @@ set_silent(model)
 @variable(model, 0 <= x[1:T] <= 30)
 set_start_value.(x, [9.0, 10.0, 12.0])   # fill(9.0, T) does not converge here
 
-@objective(model, Max, sum(x))
+@objective(model, Max, sum(price[t] * x[t] for t in 1:T))
 
 cumx = [sum(x[1:t]) for t in 1:T]
 
@@ -93,8 +94,8 @@ add_JCC_QMC(model, vcat(lower, upper), [1], T - 1, Σ, μ, p; two_sided = true)
 
 optimize!(model)
 
-x_two = value.(x)
-objective_value(model) # ≈ 28.39, slightly below the single-sided value
+x_two = value.(x)      # [8.23, 9.58, 9.62]
+objective_value(model) # ≈ 53.49, slightly below the single-sided value
 
 
 # ---------------------------------------------------------------
@@ -107,5 +108,6 @@ using Distributions, Random, Statistics
 
 level(x) = l_0 .+ ξ .- cumsum(x)
 
-mean(all(level(x_one) .>= l_min; dims = 1))                 # ≈ 0.9
-mean(all((level(x_two) .>= l_min) .& (level(x_two) .<= l_max); dims = 1))  # ≈ 0.9
+mean(all(level(x_one) .>= l_min; dims = 1))                                 # ≈ 0.9 for the one-sided QMC
+mean(all(level(x_oneSRD) .>= l_min; dims = 1))                              # ≈ 0.9 for the one-sided SRD
+mean(all((level(x_two) .>= l_min) .& (level(x_two) .<= l_max); dims = 1))   # ≈ 0.9 for the two-sided QMC
