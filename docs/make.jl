@@ -6,8 +6,7 @@ makedocs(
          modules  = [ChanceConstraints],
          pages=[
                 "Home" => "index.md",
-                "Individual Chance Contraints" => "icc.md",
-                "Joint Chance Contraints" => "jcc.md",
+                "Functions" => "jcc.md",
                 "Examples" => "examples.md",
                 "Practical tips" => "tips.md"
                ])
