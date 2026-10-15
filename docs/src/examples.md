@@ -5,8 +5,8 @@ This page shows `ChanceConstraints.jl` in use, from minimal examples to a full c
 | Example | What it shows | Files |
 |---|---|---|
 | [SimpleExample](#Simple-example) | Minimal setup and solve | [`SimpleExample.jl`](https://github.com/naouess/ChanceConstraints/blob/main/examples/SimpleExample.jl) |
-| [Reservoir problem](#Reservoir-problem) | Simple reservoir problem formulation and solve| [`ReservoirExample.jl`](https://github.com/naouess/ChanceConstraints/blob/main/examples/ReservoirExample.jl) |
-| [Financial portfolio optimization](#Comparison) | Full comparison between deterministic vs. individual vs. joint chance constraints on a realistic problem | [`FinancialPortfolio/`](https://github.com/naouess/ChanceConstraints/blob/main/examples/FinancialPortfolio) |
+| [Reservoir problem](#Reservoir-problem-example) | Solve a simple reservoir problem formulation (both with joint and individual chance constraints) | [`ReservoirExample.jl`](https://github.com/naouess/ChanceConstraints/blob/main/examples/ReservoirExample.jl) and [`ReservoirExampleICC.jl`](https://github.com/naouess/ChanceConstraints/blob/main/examples/ReservoirExampleICC.jl) |
+| [Financial portfolio optimization](#Financial-potfolio-example) | Full comparison between deterministic vs. individual vs. joint chance constraints on a realistic problem | [`FinancialPortfolio/`](https://github.com/naouess/ChanceConstraints/blob/main/examples/FinancialPortfolio) |
 
 ## Simple example
 
@@ -22,14 +22,13 @@ The covariance `Σ` has non-zero off-diagonal entries, so the components are cor
 
 **What the example shows.**
 
-1. Building a JuMP model and adding the joint chance constraint with 
-   `add_JCC_QMC`, which uses quasi-Monte Carlo to approximate the probability.
-2. Solving the same problem with `add_JCC_SRD`, which uses spherical-radial
-   decomposition.
-3. Verifying the optimal solution with an independent estimate of
-   `P(ξ ≤ x*)`, which should be close to `p`.
+1. Building a JuMP model and adding the joint chance constraint with    `add_JCC_QMC`, which uses quasi-Monte Carlo to approximate the probability.
+2. Solving the same problem with `add_JCC_SRD`, which uses spherical-radial    decomposition.
+3. Verifying the optimal solution with an independent estimate of `P(ξ ≤ x*)`, which should be close to `p`.
 
 Both formulations should give the same optimal cost.
+
+#### Full implementation
 
 ```@eval
 using Markdown
@@ -106,12 +105,11 @@ add_JCC_QMC(model, vcat(lower, upper), [1], T - 1, Σ, μ, p; two_sided = true)
 
 #### What the example shows
 
-1. **Single-sided, QMC and SRD.** Both approximations give the same optimal total release.
-2. **Two-sided, QMC.** Adding the upper bound makes the problem slightly more
-   restrictive. Two-sided implementation is currently not possible using SRD.
-3. **Monte Carlo check.** The probability that the level stays within bounds
-   is estimated by simulating 200,000 inflow scenarios. It should be close to
-   `p = 0.9` for both solutions.
+1. **Single-sided, QMC and SRD.** Both approximations give the same optimal solution.
+2. **Two-sided, QMC.** Adding the upper bound makes the problem slightly more    restrictive. *Two-sided implementation is currently not possible using SRD.*
+3. Verifying the optimal solution with an independent estimate of `P(ξ ≤ x*)`, which should be close to `p`.
+
+#### Full implementation
 
 ```@eval
 using Markdown
@@ -140,6 +138,7 @@ These are linear in `x`, so no package call is needed:
 
 ```julia
 using Distributions, LinearAlgebra
+using JuMP, Ipopt
 
 z = quantile(Normal(), p)
 σ = sqrt.(diag(Σ))
@@ -148,7 +147,7 @@ model = Model(Ipopt.Optimizer)
 set_silent(model)
 
 @variable(model, 0 <= x[1:T] <= 30)
-@objective(model, Max, sum(x))
+@objective(model, Max, sum(price[t] * x[t] for t in 1:T))
 
 cumx = [sum(x[1:t]) for t in 1:T]
 @constraint(model, [t = 1:T], cumx[t] <= l_0 - l_min + μ[t] - z * σ[t])
@@ -158,34 +157,11 @@ x_ind = value.(x)
 objective_value(model)
 ```
 
-**Two-sided version.** The constraint `P(lower_t ≤ ξ_t ≤ upper_t) ≥ p` becomes
+**Checking the joint probability.** Reuse the independent Monte Carlo check on `x_ind`. Each period satisfies its own constraint with probability `p = 0.9`, but the probability that *all* periods are satisfied *jointly* is lower than `p` and equal to `p_ind ≈ 0.8`. That gap is what the joint formulation closes.
 
-```math
-\Phi\!\left(\tfrac{\text{upper}_t - \mu_t}{\sigma_t}\right)
-- \Phi\!\left(\tfrac{\text{lower}_t - \mu_t}{\sigma_t}\right) \ge p ,
-```
-
-which is nonlinear but smooth. Using `Φ(u) = ½(1 + erf(u/√2))`:
-
-```julia
-using SpecialFunctions
-
-Φ(u) = 0.5 * (1 + erf(u / sqrt(2)))
-
-lower = [l_min - l_0 + cumx[t] for t in 1:T]
-upper = [l_max - l_0 + cumx[t] for t in 1:T]
-
-@constraint(model, [t = 1:T],
-    Φ((upper[t] - μ[t]) / σ[t]) - Φ((lower[t] - μ[t]) / σ[t]) >= p)
-```
-
-**Checking the joint probability.** Reuse the Monte Carlo check from the joint example on `x_ind`:
-
-```julia
-mean(all(level(x_ind) .>= l_min; dims = 1))
-```
-
-Each period satisfies its own constraint with probability `p`, but the probability that *all* periods are satisfied together is generally lower than `p`. That gap is what the joint formulation closes.
+The full script for the implementation of the reservoir problem with individual chance constraints, both in the one-sided and two-sided case can be found in [ReservoirExampleICC](https://github.com/naouess/ChanceConstraints/blob/main/examples/ReservoirExampleICC.jl).
 
 ## Financial portfolio example
+
+
 
