@@ -8,6 +8,12 @@ This page shows `ChanceConstraints.jl` in use, from minimal examples to a full c
 | [Reservoir problem](#Reservoir-problem-example) | Solve a simple reservoir problem formulation (both with joint and individual chance constraints) | [`ReservoirExample.jl`](https://github.com/naouess/ChanceConstraints/blob/main/examples/ReservoirExample.jl) and [`ReservoirExampleICC.jl`](https://github.com/naouess/ChanceConstraints/blob/main/examples/ReservoirExampleICC.jl) |
 | [Financial portfolio optimization](#Financial-potfolio-example) | Full comparison between deterministic vs. individual vs. joint chance constraints on a realistic problem | [`FinancialPortfolio/`](https://github.com/naouess/ChanceConstraints/blob/main/examples/FinancialPortfolio) |
 
+The following sections are structured as follows:
+```@contents
+Pages = ["examples.md"]
+Depth = 3
+```
+
 ## Simple example
 
 A joint chance constraint requires that *all* components of a random vector are satisfied simultaneously with probability at least `p`. This example illustrates the minimal workflow for that case.
@@ -257,7 +263,7 @@ examples/FinancialPortfolio/
 From the command line:
 
 ```
-julia run.jl
+julia --project run.jl
 ```
 
 `run.jl` prints a table with one row per formulation: the cost of the portfolio, the empirical probability of no shortfall in any year, and the worst reliability over the rolling windows.
