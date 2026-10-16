@@ -117,18 +117,21 @@ function transform_srd_samples(
     dim_cons = κ + 1
 
     @assert size(Σ) == (d, d)
-    @assert size(SampleOnSphere, 2) >=
-            dim_cons * (d - dim_cons + 1)
+    @assert size(SampleOnSphere, 2) >= dim_cons
+    # @assert size(SampleOnSphere, 2) >=  dim_cons * (d - dim_cons + 1)
 
-    L = cholesky(Symmetric(Σ), check = true).L
+
+    # number of windows present in the matrix (replaces the Cholesky of the full Σ)
+    nwin = min(size(SampleOnSphere, 2) ÷ dim_cons, d - dim_cons + 1)
 
     transformed = copy(SampleOnSphere)
 
-    for j in 1:(d - dim_cons + 1)
+    for j in 1:nwin
         first_col = dim_cons * (j - 1) + 1
         last_col = first_col + dim_cons - 1
 
-        Lblock = L[j:j+dim_cons-1, j:j+dim_cons-1]
+        # Cholesky factor of the window's own covariance
+        Lblock = cholesky(Symmetric(Σ[j:j+dim_cons-1, j:j+dim_cons-1])).L
 
         for n in axes(transformed, 1)
             v = copy(transformed[n, first_col:last_col])
@@ -185,8 +188,8 @@ function compute_with_SRD(
     dim_cons = κ + 1
 
     @assert 1 <= w <= d - κ
-    @assert size(transformed_samples, 2) >=
-            dim_cons * (d - dim_cons + 1)
+    # the matrix only has to contain the blocks up to window w
+    @assert size(transformed_samples, 2) >= dim_cons * w
 
     first_col = dim_cons * (w - 1) + 1
     last_col = first_col + dim_cons - 1
@@ -283,14 +286,19 @@ function add_JCC_SRD(
     @assert s > 0 "The number of sample s must be positive."
     @assert size(Σ) == (length(μ), length(μ)) "Σ must be square and match μ."
     @assert 0.5 <= p <= 1.0 "The probability p must be between 0.5 and 1"
-    @assert first(idx) >= 1 && last(idx) + κ <= length(x) "idx .+ κ exceeds dimension."
+    @assert minimum(idx) >= 1 && maximum(idx) + κ <= length(x) "idx .+ κ exceeds dimension."
 
     # Check that the covariance is usable
     @assert isfinite.(Σ) |> all "Σ contains non-finite values."
     @assert isfinite.(μ) |> all "μ contains non-finite values."
     @assert isposdef(Σ) "Σ is not positive definite"
 
-    @constraint(model, [i in eachindex(x)], x[i] >= μ[i] + 1e-8)
+    # lower bound only for the components covered by the windows
+    covered = falses(length(x))
+    for j in idx
+        covered[j:j+κ] .= true
+    end
+    @constraint(model, [i in findall(covered)], x[i] >= μ[i] + 1e-8)
 
     d = length(μ)
     dim_cons = κ + 1
@@ -298,10 +306,11 @@ function add_JCC_SRD(
     rng = MersenneTwister(seed)
 
     # Generate raw samples exactly once
+    # only for the blocks up to the last requested window
     raw_samples = randn(
         rng,
         s,
-        dim_cons * (d - dim_cons + 1)
+        dim_cons * maximum(idx)
     )
 
     # Transform raw samples exactly once
