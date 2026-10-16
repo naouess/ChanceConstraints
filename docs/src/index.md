@@ -28,11 +28,11 @@ Two common ways of handling this both have drawbacks:
 - **Worst-case (robust) models** protect against every realization. This is
   safe but often far too expensive.
 
-A **chance constraint** sits in between. It asks that a constraint holds with at least a chosen probability `p` (for example 90% or 95%), and accepts a small violation risk `1 - p` in exchange for a cheaper solution. The risk level is an explicit modelling choice, and the cost of reliability can be adjusted by changing `p`.
+A **chance constraint** sits in between. It asks that a constraint holds with at least a chosen probability $p$ (for example 90% or 95%), and accepts a small violation risk $1 - p$ in exchange for a cheaper solution. The risk level is an explicit modelling choice, and the cost of reliability can be adjusted by changing $p$.
 
 ## Individual vs. joint chance constraints
 
-Suppose a decision `x` must satisfy `m` uncertain constraints, for example one per time period.
+Suppose a decision $x$ must satisfy $m$ uncertain constraints, for example one per time period.
 
 An **individual chance constraint** treats each constraint separately:
 
@@ -40,7 +40,7 @@ An **individual chance constraint** treats each constraint separately:
 \mathbb{P}\big(g_i(x,\xi) \le 0\big) \ge p, \qquad i = 1,\dots,m .
 ```
 
-Each constraint is satisfied with probability `p`, but this says nothing about all of them holding *at the same time*.
+Each constraint is satisfied with probability $p$, but this says nothing about all of them holding *at the same time*.
 
 A **joint chance constraint** requires all constraints to hold simultaneously:
 
@@ -48,7 +48,7 @@ A **joint chance constraint** requires all constraints to hold simultaneously:
 \mathbb{P}\big(g_i(x,\xi) \le 0,\; i = 1,\dots,m\big) \ge p .
 ```
 
-This is what is usually meant by "the system is reliable". When the constraints are correlated, for instance because they depend on cumulative inflows or on the same weather conditions, individual constraints can be misleading: the probability that *everything* holds is generally lower than `p`, so the system is less reliable than the model suggests.
+This is what is usually meant by "the system is reliable". When the constraints are correlated, for instance because they depend on cumulative inflows or on the same weather conditions, individual constraints can be misleading: the probability that *everything* holds is generally lower than $p$, so the system is less reliable than the model suggests.
 
 The possibly striking difference between individual and joint chance constraints has been widely studied (e.g., [Van Ackooij et al., 2010, p. 547](https://doi.org/10.1007/s00186-010-0316-3), [Berthold et al., 2022, p. 34](https://doi.org/10.1080/02331934.2019.1576670)).
 
@@ -62,24 +62,24 @@ approximation** [(Nemirovski and Shapiro, 2006)](https://doi.org/10.1137/0506223
 \mathbb{P}\Big(\bigcup_{i} \{g_i > 0\}\Big) \le \sum_{i=1}^m \mathbb{P}(g_i > 0),
 ```
 
-requiring each individual constraint to hold with probability `1 - (1-p)/m` guarantees the joint constraint at level `p`. This gives a model with only individual constraints, each with a closed form for Gaussian data.
+requiring each individual constraint to hold with probability $1 - (1-p)/m$ guarantees the joint constraint at level $p$. This gives a model with only individual constraints, each with a closed form for Gaussian data.
 
-The price is conservatism. The bound ignores correlation and assumes the violation events are disjoint, so the resulting solution is typically more expensive than necessary, and the gap grows with `m`.
+The price is conservatism. The bound ignores correlation and assumes the violation events are disjoint, so the resulting solution is typically more expensive than necessary, and the gap grows with $m$.
 
 This package instead evaluates the joint probability itself. For Gaussian uncertainty, it is a multivariate normal CDF, which can be computed accurately with the methods described below.
 
 ## The math
 
-**Setting.** Let `ξ ~ N(μ, Σ)` be a Gaussian random vector. The constraints treated by this package have the form
+**Setting.** Let $ξ ~ N(μ, Σ)$ be a Gaussian random vector. The constraints treated by this package have the form
 
 ```math
 \mathbb{P}\big(\xi \le x\big) \ge p , 
 ```
 
-where `x` is a vector of JuMP variables or affine expressions of the decision variables.
+where $x$ is a vector of JuMP variables or affine expressions of the decision variables.
 
-**Individual case.** For a single component `ξ_i ~ N(μ_i, Σ_ii)`, with
-`σ_i = √Σ_ii` and `Φ` the standard normal CDF,
+**Individual case.** For a single component $ξ_i ~ N(μ_i, Σ_{ii})$, with
+$σ_i = √Σ_{ii}$ and $Φ$ the standard normal CDF,
 
 ```math
 \mathbb{P}(\xi_i \le x_i) \ge p
@@ -95,15 +95,15 @@ a closed-form deterministic constraint.
 F(x) = \mathbb{P}(\xi \le x) = \Phi_\Sigma\big(x-\mu\big)
 ```
 
-is a multivariate normal CDF. It has no closed form for `m > 2`, but it is
-smooth and log-concave in `x`, so the feasible set `{x : F(x) ≥ p}` is convex.
+is a multivariate normal CDF. It has no closed form for $m > 2$, but it is
+smooth and log-concave in $x$, so the feasible set ${x : F(x) ≥ p}$ is convex.
 
-**Reliability windows.** A constraint need not cover the whole horizon. The arguments passed to functions of this package define windows of `κ + 1` consecutive periods and their starting points, each required to hold jointly with probability `p`.
+**Reliability windows.** A constraint need not cover the whole horizon. The arguments passed to functions of this package define windows of $κ + 1$ consecutive periods and their starting points, each required to hold jointly with probability $p$.
 
 **Computation.** Two approaches are available.
 
 - **Quasi-Monte Carlo (QMC)** (`compute_with_QMC` and `add_JCC_QMC`). The CDF value and its gradient are evaluated numerically with a low-discrepancy sequence, following the algorithm of Genz (1992) implemented in Julia using the library [MvNormalCDF](https://github.com/PharmCat/MvNormalCDF.jl). The gradient is passed to the solver.
-- **Spherical-radial decomposition (SRD)** (`compute_with_SRD` and`add_JCC_SRD`). Writing `ξ = μ + R·L·u`, with `Σ = LLᵀ`, `u` uniform on the unit sphere and `R` chi-distributed, the probability becomes an expectation over directions `u` of a one-dimensional chi CDF, computed along the ray from the mean to the boundary. SRD requires the mean to be strictly feasible, `h(x) > μ`.
+- **Spherical-radial decomposition (SRD)** (`compute_with_SRD` and`add_JCC_SRD`). Writing $ξ = μ + R·L·u$, with $Σ = LLᵀ$, $u$ uniform on the unit sphere and $R$ chi-distributed, the probability becomes an expectation over directions $u$ of a one-dimensional chi CDF, computed along the ray from the mean to the boundary. SRD requires the mean to be strictly feasible, $h(x) > μ$.
 
 ***A detailed discussion of the two methods and a comparison of their strengths and weaknesses will be given in an accompanying paper, which will be published soon and linked in this documentation website.***
 <!-- TODO: add citation -->
@@ -139,13 +139,13 @@ objective_value(model)
 value.(x)
 ```
 
-Because the joint probability is a nonlinear function of `x`, this package needs a **nonlinear solver** such as [Ipopt](https://github.com/jump-dev/Ipopt.jl), which is the solver used in the examples. 
+Because the joint probability is a nonlinear function of $x$, this package needs a **nonlinear solver** such as [Ipopt](https://github.com/jump-dev/Ipopt.jl), which is the solver used in the examples. 
 
 See the [JuMP tutorials](https://jump.dev/JuMP.jl/stable/tutorials/getting_started/getting_started_with_JuMP/) for more.
 
 ## A first simple model
 
-Find the cheapest `x` such that `P(ξ ≤ x) ≥ 0.9`:
+Find the cheapest $x$ such that $P(ξ ≤ x) ≥ 0.9$:
 
 ```julia
 using ChanceConstraints, JuMP, Ipopt
