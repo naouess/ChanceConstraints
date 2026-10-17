@@ -12,7 +12,7 @@ Additionally, the library integrates with JuMP, enabling the formulation of stoc
 The documentation is available at
 [ChanceConstraints.jl – Documentation](https://naouess.github.io/ChanceConstraints/dev/).
 
-Here is a first model to get started
+Here is a first model to get started:
 
 Find the cheapest $x$ such that $P(ξ ≤ x) ≥ 0.9$:
 
