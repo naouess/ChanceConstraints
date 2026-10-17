@@ -145,7 +145,7 @@ See the [JuMP tutorials](https://jump.dev/JuMP.jl/stable/tutorials/getting_start
 Find the cheapest $x$ such that $P(ξ ≤ x) ≥ 0.9$:
 
 ```julia
-using ChanceConstraints, JuMP, Ipopt
+using ChanceConstraints, Ipopt
 
 μ = [5.0, 2.0, 4.0, 3.0]    # Mean
 Σ = [ 2.0  0.5  0.3 -0.1;   # Covariance
