@@ -10,7 +10,7 @@ Additionally, the library integrates with JuMP, enabling the formulation of stoc
 ## Documentation
 
 The documentation is available at
-[ChanceConstraints.jl – Documentation](https://naouess.github.io/ChanceConstraints.jl/dev/).
+[ChanceConstraints.jl – Documentation](https://naouess.github.io/ChanceConstraints/dev/).
 
 Here is a first model to get started
 
