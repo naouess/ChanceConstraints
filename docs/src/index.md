@@ -20,11 +20,9 @@ The [Examples](examples.md) page then shows complete models.
 ## Why chance constraints
 
 Many optimization problems depend on quantities that are not known when the
-decision is made: inflows to a reservoir, demand, solar and wind generation.
-Two common ways of handling this both have drawbacks:
+decision is made: inflows to a reservoir, demand, solar and wind generation, as well as grid availability. Two common ways of handling this both have drawbacks:
 
-- **Deterministic models** replace the uncertain quantity by its expected value. The
-  resulting solution often fails when the realization differs from the mean.
+- **Deterministic models** replace the uncertain quantity by its expected value. The resulting solution often fails when the realization differs from the mean.
 - **Worst-case (robust) models** protect against every realization. This is
   safe but often far too expensive.
 
@@ -48,15 +46,14 @@ A **joint chance constraint** requires all constraints to hold simultaneously:
 \mathbb{P}\big(g_i(x,\xi) \le 0,\; i = 1,\dots,m\big) \ge p .
 ```
 
-This is what is usually meant by "the system is reliable". When the constraints are correlated, for instance because they depend on cumulative inflows or on the same weather conditions, individual constraints can be misleading: the probability that *everything* holds is generally lower than $p$, so the system is less reliable than the model suggests.
+When the constraints are correlated, for instance because they depend on cumulative inflows or on the same weather conditions, individual constraints can be misleading: the probability that *everything* holds is generally lower than $p$, so the system is less reliable than the model suggests.
 
 The possibly striking difference between individual and joint chance constraints has been widely studied (e.g., [Van Ackooij et al., 2010, p. 547](https://doi.org/10.1007/s00186-010-0316-3), [Berthold et al., 2022, p. 34](https://doi.org/10.1080/02331934.2019.1576670)).
 
 
 ## Bonferroni vs. exact computation
 
-A classical way to avoid the joint probability is the **Bonferroni
-approximation** [(Nemirovski and Shapiro, 2006)](https://doi.org/10.1137/050622328). Since
+A classical way to avoid the nonlinearity and compelexity in computing the joint probability is the **Bonferroni approximation** [(Nemirovski and Shapiro, 2006)](https://doi.org/10.1137/050622328). Since
 
 ```math
 \mathbb{P}\Big(\bigcup_{i} \{g_i > 0\}\Big) \le \sum_{i=1}^m \mathbb{P}(g_i > 0),
@@ -70,7 +67,7 @@ This package instead evaluates the joint probability itself. For Gaussian uncert
 
 ## The math
 
-**Setting.** Let $ξ ~ N(μ, Σ)$ be a Gaussian random vector. The constraints treated by this package have the form
+**Setting.** Let $ξ \sim  N(μ, Σ)$ be a Gaussian random vector. The constraints treated by this package have the form
 
 ```math
 \mathbb{P}\big(\xi \le x\big) \ge p , 
@@ -78,7 +75,7 @@ This package instead evaluates the joint probability itself. For Gaussian uncert
 
 where $x$ is a vector of JuMP variables or affine expressions of the decision variables.
 
-**Individual case.** For a single component $ξ_i ~ N(μ_i, Σ_{ii})$, with
+**Individual case.** For a single component $ξ_i \sim  N(μ_i, Σ_{ii})$, with
 $σ_i = √Σ_{ii}$ and $Φ$ the standard normal CDF,
 
 ```math

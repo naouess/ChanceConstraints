@@ -10,10 +10,9 @@ compute_with_QMC
 
 ### Using Spherical Radial Decomposition
 
-**Restriction for SRD.** The spherical-radial decomposition method requires
-`p > 1/2`, and the mean `μ` must be a strictly feasible point (guaranteed through an implementation of the lower bound `x ≥ μ + δ` within the SRD functions). 
+**Restriction for SRD.** The spherical-radial decomposition method requires `p > 1/2`, and the mean `μ` must be a strictly feasible point (guaranteed through an implementation of the lower bound `x ≥ μ + δ` within the SRD functions). 
 
-For smaller probability levels – which are rarely of practical relevance, use the QMC method.
+For smaller probability levels, which are rarely of practical relevance, use the QMC method.
 
 ```@docs
 compute_with_SRD
