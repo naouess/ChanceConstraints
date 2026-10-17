@@ -1,6 +1,4 @@
 # Common mistakes or issues
-<!-- - Window duration length of 1, 2 ? 
-- non-Gaussian distributions? -->
 
 This section lists possible implementation mistakes or bugs that can occur when using `ChanceConstraints.jl` and offers practical tips to deal with them.
 
