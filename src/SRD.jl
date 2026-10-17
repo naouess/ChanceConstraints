@@ -22,7 +22,6 @@ structure used to construct the samples.
 - `mu`: Mean vector of the normal random vector.
 
 =#
-
 function ProbFunction(x, SampleOnSphere, mu)
 
     SampleSize, M = size(SampleOnSphere)
@@ -337,5 +336,5 @@ function add_JCC_SRD(
 
     end
 
-    return transformed_samples
+    return # transformed_samples
 end

@@ -68,7 +68,7 @@ function compute_with_QMC(
     @assert isfinite.(μj) |> all "μ contains non-finite values."
 
     # This will throw an error if Σj is not positive definite
-    F = cholesky(Symmetric(Σj))
+    @assert isposdef(Σj) "Σj is not positive definite"
 
     # ------------------------------------------------------------------
     # Use a deterministic RNG stream for each function evaluation.
@@ -211,10 +211,8 @@ function compute_with_QMC(
             end
 
             if two_sided
-
                 # Derivative with respect to the lower bound.
-                # It has a negative sign because increasing the lower
-                # bound reduces the probability.
+                # It has a negative sign.
                 lower_conditional = conditional_cdf(
                     lower,
                     upper,
@@ -238,7 +236,7 @@ end
 
 #=
 	TODO
-    [ ] Multiple windows. If idx has more than one entry, 
+    [ ] Check how this works with multiple windows. If idx has more than one entry, 
         every window currently receives the same full x. 
         In two-sided mode that only makes sense for a single window. 
         For several windows, each needs its own 2q slice.
