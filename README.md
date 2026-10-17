@@ -49,4 +49,4 @@ This package grew out of research on the economic dispatch of weakly connected m
 
 ## License
 
-ChanceConstraints.jl is released under the [<MIT NAME> license](LICENSE).
+ChanceConstraints.jl is released under the [MIT license](LICENSE).
