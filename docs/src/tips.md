@@ -3,7 +3,7 @@
 This section lists possible implementation mistakes or bugs that can occur when using `ChanceConstraints.jl` and offers practical tips to deal with them.
 
 ## Covariance matrix not positive definite
-`Σ` must be symmetric and positive definite. Typical causes are rounding asymmetries, a covariance estimated from too few samples, or duplicated / perfectly correlated components.
+$Σ$ must be symmetric and positive definite. Typical causes are rounding asymmetries, a covariance estimated from too few samples, or duplicated / perfectly correlated components.
 
 ```julia
 isposdef(Σ)                          # check
@@ -11,16 +11,23 @@ isposdef(Σ)                          # check
 ```
 
 ## SRD with probabilities below 0.5
-SRD requires the mean to be strictly feasible, which in general only holds for `p > 0.5`. For smaller `p`, which is rarely of practical relevance, use QMC instead.
+SRD requires the mean to be strictly feasible, which in general only holds for $p > 0.5$. For smaller $p$, which is rarely of practical relevance, use QMC instead.
 
-## Window length of 1 (and 2?)
-The window length is `κ + 1`. With `κ = 0` the constraint involves a single component, i.e. it is an individual chance constraint. A closed-form quantile is cheaper and exact, so prefer it (see `solve_icc` in the portfolio example):
+## Window length: minimum κ
+The window length is $κ + 1$. The smallest admissible $κ$ depends on the method:
+
+| method | minimum κ | window length |
+|---|---|---|
+| `add_JCC_QMC` | 2 | at least 3 components |
+| `add_JCC_SRD` | 1 | at least 2 components |
+
+**$κ = 0$** (one component): the constraint is an individual chance constraint. It has a closed-form quantile, which is cheaper and exact, so use it directly (see `solve_icc` in the portfolio example). Neither method accepts it:
 
 ```julia
-@constraint(model, cash[t] >= quantile(Normal(μ[t], sqrt(Σ[t, t])), p))
+  @constraint(model, cash[t] >= quantile(Normal(μ[t], sqrt(Σ[t, t])), p))
 ```
 
-<!-- TODO: describe what to watch out for with window length 2 -->
+**$κ = 1$** (two components), QMC: after the Prékopa reduction of the problem, the   covariance matrix has dimension smaller than 2 and the method, caled through `MvNormalCDF` cannot be applied. The reduced matrix is large enough only from $κ = 2$ on. Use SRD for windows of two components.
 
 ## Infeasible starting point
 Ipopt may fail to converge when started at a point where the chance constraint is badly violated. Start at, or near, a point where the constraint is satisfied, for example the solution of the deterministic problem (all random variables replaced by their mean). You can get a report about feasibility with `primal_feasibility_report` before calling `optimize!`. Read more on this feature here: [Checking feasibility of solutions](https://jump.dev/JuMP.jl/stable/manual/solutions/#Checking-feasibility-of-solutions).
@@ -43,20 +50,20 @@ add_JCC_QMC(model, slack, [1], T - 1, Σ, -μ, p)
 ## Input values check
 Before calling `add_JCC_QMC` / `add_JCC_SRD`, check that:
 
-- `0 < p < 1`;
-- `Σ` is square, positive definite and has a matching dimension for `μ`;
-- every window `s:s+κ` for `s` in `idx` lies inside `1:length(μ)`;
-- `κ` is the dimension of the window minus 1, not the number of constraints. With `two_sided = true` the vector of affine expressions `x` which is passed to the joint contraint, has length `2 × length(μ)`, stacked as `[lower; upper]`, but `κ` is unchanged.
+- $0 < p < 1$;
+- $Σ$ is square, positive definite and has a matching dimension for $μ$;
+- every window $s:s+κ$ for $s$ in $idx$ lies inside $1:length(μ)$;
+- $κ$ is the dimension of the window minus 1, not the number of constraints. With `two_sided = true` the vector of affine expressions $x$ which is passed to the joint contraint, has length `2 × length(μ)`, stacked as `[lower; upper]`, but $κ$ is unchanged.
 
 ## Two-sided window too narrow
-For a two-sided constraint `P(lower ≤ ξ ≤ upper) ≥ p`, the probability cannot exceed
+For a two-sided constraint $P(\text{lower} ≤ ξ ≤ \text{upper}) ≥ p$, the probability cannot exceed
 that of a window of the same width centred on the mean. If the width is too small
-compared to the spread of ξ, no choice of `x` can reach `p`, and the solver reports
+compared to the spread of ξ, no choice of $x$ can reach $p$, and the solver reports
 infeasibility or returns a meaningless point (for example a joint probability of 0).
-In the reservoir example, a width of `l_max - l_min = 5` with `σ ≈ 1.73` in the last
-period gives at most 0.85, so `p = 0.9` is infeasible.
+In the reservoir example, a width of $l_\text{max} - l_\text{min} = 5$ with $σ ≈ 1.73$ in the last
+period gives at most 0.85, so $p = 0.9$ is infeasible.
 
-If the width is fixed (it does not depend on `x`), check it before building the model:
+If the width is fixed (it does not depend on $x$), check it before building the model:
 
 ```julia
 w = l_max - l_min                                              # upper - lower
@@ -64,29 +71,14 @@ best = mvnormcdf(Σ, fill(-w/2, d), fill(w/2, d))[1]           # window centred 
 best >= p || @warn "Infeasible: the best possible probability is $best < p"
 ```
 
-If the check fails, widen the window, lower `p`, or shorten the horizon.
+If the check fails, widen the window, lower $p$, or shorten the horizon.
 
-## Wrong affine expression of `x`
-The vector passed to `add_JCC_QMC` / `add_JCC_SRD` is not the decision variable but the affine expression `x` in `P(ξ ≤ x) ≥ p`. Typical mistakes are a wrong sign or
+## Wrong affine expression of $x$
+The vector passed to `add_JCC_QMC` / `add_JCC_SRD` is not the decision variable but the affine expression $x$ in $P(ξ ≤ x) ≥ p$. Typical mistakes are a wrong sign or
 direction (see "Inverted sign of the mean"), a forgotten constant, a missing cumulative sum, etc.
-
-
-<!--### Non-Gaussian distributions
-ChanceConstraints.jl assumes that ξ is multivariate Gaussian with mean `μ` and
-covariance `Σ`. Other distributions cannot be passed directly. Options:
-
-- If ξ is an affine transformation of a Gaussian vector, fold the transformation into
-  the affine expression of `x`.
-- For a log-normal variable, model its logarithm, which is Gaussian, and transform the
-  bound accordingly.
-- Otherwise a Gaussian with matched mean and covariance can serve as an approximation,
-  but it can misjudge the tails. Always evaluate the solution on scenarios from the true
-  distribution and compare the result with `p`.
-
-TODO: mention planned support for other distributions, if any -->
 
 # Other practical tips
 
-- **Check the result independently.** Estimate the probability at the solution with `mvnormcdf` or a large Monte Carlo sample on scenarios that were not used in the optimisation, and compare it with `p`.
-- **Accuracy vs. speed.** The number of samples `s` controls the accuracy of the probability approximation. Increase it if the empirical reliability differs noticeably from `p`.
+- **Check the result independently.** Estimate the probability at the solution with `mvnormcdf` or a large Monte Carlo sample on scenarios that were not used in the optimisation, and compare it with $p$.
+- **Accuracy vs. speed.** The number of samples $s$ controls the accuracy of the probability approximation. Increase it if the empirical reliability differs noticeably from $p$.
 - **Compare against the deterministic and individual-constraint models.** They show what the joint constraint buys you: the deterministic model violates the requirement often, and individual constraints do not control the joint probability.

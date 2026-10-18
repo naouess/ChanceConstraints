@@ -4,7 +4,7 @@ This page shows `ChanceConstraints.jl` in use, from minimal examples to a full c
 
 | Example | What it shows | Files |
 |---|---|---|
-| [SimpleExample](#Simple-example) | Minimal setup and solve | [`SimpleExample.jl`](https://github.com/naouess/ChanceConstraints/blob/main/examples/SimpleExample.jl) |
+| [Simple Example](#Simple-example) | Minimal setup and solve | [`SimpleExample.jl`](https://github.com/naouess/ChanceConstraints/blob/main/examples/SimpleExample.jl) |
 | [Reservoir problem](#Reservoir-problem-example) | Solve a simple reservoir problem formulation (both with joint and individual chance constraints) | [`ReservoirExample.jl`](https://github.com/naouess/ChanceConstraints/blob/main/examples/ReservoirExample.jl) and [`ReservoirExampleICC.jl`](https://github.com/naouess/ChanceConstraints/blob/main/examples/ReservoirExampleICC.jl) |
 | [Financial portfolio optimization](#Financial-potfolio-example) | Full comparison between deterministic vs. individual vs. joint chance constraints on a realistic problem | [`FinancialPortfolio/`](https://github.com/naouess/ChanceConstraints/blob/main/examples/FinancialPortfolio) |
 
@@ -16,7 +16,7 @@ Depth = 3
 
 ## Simple example
 
-A joint chance constraint requires that several components of a random vector are satisfied simultaneously with probability at least `p`. This example illustrates the minimal workflow for that case.
+A joint chance constraint requires that several components of a random vector are satisfied simultaneously with probability at least $p$. This example illustrates the minimal workflow for that case.
 
 **Problem.** Find the cheapest $x$ with unit costs $c$ such that
 
