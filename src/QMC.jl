@@ -288,7 +288,7 @@ function add_JCC_QMC(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::I
     # ------------------------------------------
     # Validate inputs 
     # ------------------------------------------
-    @assert κ >= 1 "The duration of an outage κ must be nonnegative and higher than 1." # TODO check here
+    @assert κ >= 2 "The duration of an outage κ must be nonnegative and higher than 2."
     @assert s > 0 "The number of sample s must be positive."
     @assert size(Σ) == (length(μ), length(μ)) "Σ must be square and match μ."
     @assert 0.0 <= p <= 1.0 "The probability p must be between 0 and 1"
