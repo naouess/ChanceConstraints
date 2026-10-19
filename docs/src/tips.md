@@ -3,7 +3,7 @@
 This section lists possible implementation mistakes or bugs that can occur when using `ChanceConstraints.jl` and offers practical tips to deal with them.
 
 ## Covariance matrix not positive definite
-$Σ$ must be symmetric and positive definite. Typical causes are rounding asymmetries, a covariance estimated from too few samples, or duplicated / perfectly correlated components.
+Σ must be symmetric and positive definite. Typical causes are rounding asymmetries, a covariance estimated from too few samples, or duplicated / perfectly correlated components.
 
 You can use these tricks to check positive-definiteness and adjust your covariance matrix:
 
