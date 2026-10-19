@@ -157,6 +157,7 @@ p = 0.9                     # Probability level
 
 model = Model(Ipopt.Optimizer)
 @variable(model, x[1:4] >= 0)
+set_start_value.(x, 9.0)
 @objective(model, Min, sum(x))
 add_JCC_QMC(model, x, [1], κ, Σ, μ, p)
 optimize!(model)

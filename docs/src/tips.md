@@ -5,6 +5,8 @@ This section lists possible implementation mistakes or bugs that can occur when 
 ## Covariance matrix not positive definite
 $Σ$ must be symmetric and positive definite. Typical causes are rounding asymmetries, a covariance estimated from too few samples, or duplicated / perfectly correlated components.
 
+You can use these tricks to check positive-definiteness and adjust your covariance matrix:
+
 ```julia
 isposdef(Σ)                          # check
 Σ = (Σ + Σ') / 2 + 1e-10 * I         # symmetrise and add a small jitter
@@ -29,7 +31,9 @@ The window length is $κ + 1$. The smallest admissible $κ$ depends on the metho
 
 **$κ = 1$** (two components), QMC: after the Prékopa reduction of the problem, the   covariance matrix has dimension smaller than 2 and the method, caled through `MvNormalCDF` cannot be applied. The reduced matrix is large enough only from $κ = 2$ on. Use SRD for windows of two components.
 
-## Infeasible starting point
+## Starting point
+With Ipopt, it is highly encouraged to set a starting point for the optimization.
+
 Ipopt may fail to converge when started at a point where the chance constraint is badly violated. Start at, or near, a point where the constraint is satisfied, for example the solution of the deterministic problem (all random variables replaced by their mean). You can get a report about feasibility with `primal_feasibility_report` before calling `optimize!`. Read more on this feature here: [Checking feasibility of solutions](https://jump.dev/JuMP.jl/stable/manual/solutions/#Checking-feasibility-of-solutions).
 
 ## Bad scaling
@@ -52,21 +56,20 @@ Before calling `add_JCC_QMC` / `add_JCC_SRD`, check that:
 
 - $0 < p < 1$;
 - $Σ$ is square, positive definite and has a matching dimension for $μ$;
-- every window $s:s+κ$ for $s$ in $idx$ lies inside $1:length(μ)$;
+- every window `s:s+κ` for `s` in `idx` lies inside `1:length(μ)`;
 - $κ$ is the dimension of the window minus 1, not the number of constraints. With `two_sided = true` the vector of affine expressions $x$ which is passed to the joint contraint, has length `2 × length(μ)`, stacked as `[lower; upper]`, but $κ$ is unchanged.
 
 ## Two-sided window too narrow
-For a two-sided constraint $P(\text{lower} ≤ ξ ≤ \text{upper}) ≥ p$, the probability cannot exceed
-that of a window of the same width centred on the mean. If the width is too small
-compared to the spread of ξ, no choice of $x$ can reach $p$, and the solver reports
-infeasibility or returns a meaningless point (for example a joint probability of 0).
-In the reservoir example, a width of $l_\text{max} - l_\text{min} = 5$ with $σ ≈ 1.73$ in the last
-period gives at most 0.85, so $p = 0.9$ is infeasible.
+For a two-sided constraint $P(\text{lower} ≤ ξ ≤ \text{upper}) ≥ p$, the probability cannot exceed that of a window of the same width centred on the mean. If the width is too small compared to the spread of ξ, no choice of $x$ can reach $p$, and the solver reports infeasibility or returns a meaningless point (for example a joint probability of 0).
+In the reservoir example, a width of $l_\text{max} - l_\text{min} = 5$ with $σ ≈ 1.73$ in the last period gives at most 0.85, so $p = 0.9$ is infeasible.
 
 If the width is fixed (it does not depend on $x$), check it before building the model:
 
 ```julia
+using MvNormalCDF
+
 w = l_max - l_min                                              # upper - lower
+d = length(μ)
 best = mvnormcdf(Σ, fill(-w/2, d), fill(w/2, d))[1]           # window centred on μ
 best >= p || @warn "Infeasible: the best possible probability is $best < p"
 ```
@@ -74,8 +77,7 @@ best >= p || @warn "Infeasible: the best possible probability is $best < p"
 If the check fails, widen the window, lower $p$, or shorten the horizon.
 
 ## Wrong affine expression of $x$
-The vector passed to `add_JCC_QMC` / `add_JCC_SRD` is not the decision variable but the affine expression $x$ in $P(ξ ≤ x) ≥ p$. Typical mistakes are a wrong sign or
-direction (see "Inverted sign of the mean"), a forgotten constant, a missing cumulative sum, etc.
+The vector passed to `add_JCC_QMC` / `add_JCC_SRD` is not the decision variable but the affine expression $x$ in $P(ξ ≤ x) ≥ p$. Typical mistakes are a wrong sign or direction (see "Inverted sign of the mean"), a forgotten constant, a missing cumulative sum, etc.
 
 # Other practical tips
 

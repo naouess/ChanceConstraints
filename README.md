@@ -12,9 +12,7 @@ Additionally, the library integrates with JuMP, enabling the formulation of stoc
 The documentation is available at
 [ChanceConstraints.jl – Documentation](https://naouess.github.io/ChanceConstraints/dev/).
 
-Here is a first model to get started:
-
-Find the cheapest $x$ such that $P(ξ ≤ x) ≥ 0.9$:
+Here is a first model to get started. The goal is to find the cheapest $x$ such that $P(ξ ≤ x) ≥ 0.9$:
 
 ```julia
 using ChanceConstraints, Ipopt
@@ -29,6 +27,7 @@ p = 0.9                     # Probability level
 
 model = Model(Ipopt.Optimizer)
 @variable(model, x[1:4] >= 0)
+set_start_value.(x, 9.0)
 @objective(model, Min, sum(x))
 add_JCC_QMC(model, x, [1], κ, Σ, μ, p)
 optimize!(model)
