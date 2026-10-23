@@ -29,7 +29,7 @@ The window length is $κ + 1$. The smallest admissible $κ$ depends on the metho
   @constraint(model, cash[t] >= quantile(Normal(μ[t], sqrt(Σ[t, t])), p))
 ```
 
-**$κ = 1$** (two components), QMC: after the Prékopa reduction of the problem, the   covariance matrix has dimension smaller than 2 and the method, caled through `MvNormalCDF` cannot be applied. The reduced matrix is large enough only from $κ = 2$ on. Use SRD for windows of two components.
+**$κ = 1$** (two components), QMC: after the Prékopa reduction of the problem, the  covariance matrix has dimension smaller than 2 and the method, called through `MvNormalCDF` cannot be applied. The reduced matrix is large enough only from $κ = 2$ on. Use SRD for windows of two components.
 
 ## Starting point
 With Ipopt, it is highly encouraged to set a starting point for the optimization.

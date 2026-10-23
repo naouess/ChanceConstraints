@@ -38,7 +38,7 @@ More complete examples can be found in the docs page.
 
 The methods implemented in this package, and a comparison of their strengths and weaknesses, are described in:
 
-> Ouanes, N., Grandón, T. (2026) ChanceConstraints.jl: A Julia Package for Chance-Constrained Programming. **LINK TO BE ADDED SOON**
+> Ouanes, N. and Grandón, T. (2026) ChanceConstraints.jl: A Julia Package for Chance-Constrained Programming. **LINK TO BE ADDED SOON**
 
 This package grew out of research on the economic dispatch of weakly connected mini-grids under uncertainty around solar and demand forecasts, as well as main grid outage events. The research is presented in:
 
