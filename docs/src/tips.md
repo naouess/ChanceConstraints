@@ -54,10 +54,10 @@ add_JCC_QMC(model, slack, [1], T - 1, Σ, -μ, p)
 ## Input values check
 Before calling `add_JCC_QMC` / `add_JCC_SRD`, check that:
 
-- $0 < p < 1$;
-- $Σ$ is square, positive definite and has a matching dimension for $μ$;
+- 0 < p < 1;
+- Σ is square, positive definite and has a matching dimension for $μ$;
 - every window `s:s+κ` for `s` in `idx` lies inside `1:length(μ)`;
-- $κ$ is the dimension of the window minus 1, not the number of constraints. With `two_sided = true` the vector of affine expressions $x$ which is passed to the joint contraint, has length `2 × length(μ)`, stacked as `[lower; upper]`, but $κ$ is unchanged.
+- κ is the dimension of the window minus 1, not the number of constraints. With `two_sided = true` the vector of affine expressions $x$ which is passed to the joint contraint, has length `2 × length(μ)`, stacked as `[lower; upper]`, but $κ$ is unchanged.
 
 ## Two-sided window too narrow
 For a two-sided constraint $P(\text{lower} ≤ ξ ≤ \text{upper}) ≥ p$, the probability cannot exceed that of a window of the same width centred on the mean. If the width is too small compared to the spread of ξ, no choice of $x$ can reach $p$, and the solver reports infeasibility or returns a meaningless point (for example a joint probability of 0).
