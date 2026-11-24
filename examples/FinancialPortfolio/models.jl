@@ -86,11 +86,11 @@ function solve_jcc(d::PortfolioData, p::Float64;
 
     if method == :QMC
         # quasi-Monte Carlo evaluation of the multivariate normal CDF
-        add_JCC_QMC(model, cash, collect(window_starts), κ, Σ, μ, p;
+        add_JCC_QMC!(model, cash, collect(window_starts), κ, Σ, μ, p;
                     two_sided = false, s = something(s, 10_000),
                     rng = MersenneTwister(seed))
     else
-        add_JCC_SRD(model, cash, collect(window_starts), κ, Σ, μ, p;
+        add_JCC_SRD!(model, cash, collect(window_starts), κ, Σ, μ, p;
                     s = something(s, 5_000), seed = seed)
     end
 

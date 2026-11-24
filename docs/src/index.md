@@ -108,14 +108,13 @@ smooth and log-concave in $x$, so the feasible set ${x : F(x) ≥ p}$ is convex.
 ## Julia and JuMP basics
 
 **Julia.** Install Julia from [julialang.org](https://julialang.org/downloads/)
-<!-- TODO (1.9 or later is recommended; check `Project.toml` for the tested range). -->
+
 To add packages, press `]` in the Julia REPL to enter the package manager:
 
 ```julia
 pkg> add JuMP Ipopt
 pkg> add https://github.com/you/ChanceConstraints.jl 
 ```
-<!-- TODO adjust here once package is published -->
 
 Useful starting points are the
 [Julia documentation](https://docs.julialang.org) and
@@ -159,7 +158,7 @@ model = Model(Ipopt.Optimizer)
 @variable(model, x[1:4] >= 0)
 set_start_value.(x, 9.0)
 @objective(model, Min, sum(x))
-add_JCC_QMC(model, x, [1], κ, Σ, μ, p)
+add_JCC_QMC!(model, x, [1], κ, Σ, μ, p)
 optimize!(model)
 ```
 

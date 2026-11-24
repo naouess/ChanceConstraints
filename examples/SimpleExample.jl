@@ -19,7 +19,7 @@ set_start_value.(x, [9.0, 11.45, 9.0, 9.0])
 @objective(model, Min, c'x)
 
 # One reliability window starting at index 1 and spanning all 4 time steps (κ = 3)
-add_JCC_QMC(model, x, [1], 3, Σ, μ, p)
+add_JCC_QMC!(model, x, [1], 3, Σ, μ, p)
 
 optimize!(model)
 
@@ -38,7 +38,7 @@ set_start_value.(x, [9.0, 11.45, 9.0, 9.0])
 
 @objective(model, Min, c'x)
 
-add_JCC_SRD(model, x, [1], 3, Σ, μ, p)
+add_JCC_SRD!(model, x, [1], 3, Σ, μ, p)
 
 optimize!(model)
 

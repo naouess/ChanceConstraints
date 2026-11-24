@@ -36,7 +36,7 @@ slack = [l_0 - l_min - cumx[t] for t in 1:T]
 μ_negative = -μ
 
 # One reliability window starting at period 1 and spanning all T periods (κ = T - 1)
-add_JCC_QMC(model, slack, [1], T - 1, Σ, μ_negative, p)
+add_JCC_QMC!(model, slack, [1], T - 1, Σ, μ_negative, p)
 
 optimize!(model)
 
@@ -63,7 +63,7 @@ slack = [l_0 - l_min - cumx[t] for t in 1:T]
 μ_negative = -μ
 
 # One reliability window starting at period 1 and spanning all T periods (κ = T - 1)
-add_JCC_SRD(model, slack, [1], T - 1, Σ,  μ_negative, p)
+add_JCC_SRD!(model, slack, [1], T - 1, Σ,  μ_negative, p)
 
 optimize!(model)
 
@@ -90,7 +90,7 @@ upper = [l_max - l_0 + cumx[t] for t in 1:T]
 
 # Stack the bounds as [lower; upper] (length 2T). The random vector still has
 # T components, so κ stays T - 1.
-add_JCC_QMC(model, vcat(lower, upper), [1], T - 1, Σ, μ, p; two_sided = true)
+add_JCC_QMC!(model, upper, [1], T - 1, Σ, μ, p; z = lower, two_sided = true)
 
 optimize!(model)
 
