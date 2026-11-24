@@ -4,7 +4,7 @@ module ChanceConstraints
     import Reexport
     Reexport.@reexport using JuMP
 
-    export add_JCC_SRD, add_JCC_QMC, compute_with_SRD, compute_with_QMC
+    export add_JCC_SRD!, add_JCC_QMC!, compute_with_SRD, compute_with_QMC
 
     include("chi_gamma.jl")
     include("SRD.jl")

@@ -3,32 +3,42 @@
     compute_with_QMC(j, κ, Σ, μ; two_sided=false, s=10_000, rng=MersenneTwister(1234))
 ```
 
-Compute a quasi-Monte Carlo (QMC) approximation of a joint probability and
-its gradient.
+Compute a quasi-Monte Carlo (QMC) approximation of a joint Gaussian probability and
+its gradient with respect to the deterministic bounds.
 
-Let ``\\xi`` be a random vector with mean ``\\mu`` and covariance matrix
-``\\Sigma``. For the indices ``i = j, \\ldots, j+\\kappa``, the one-sided
-probability is
+Let ``\\zeta = A\\xi \\sim \\mathcal{N}(\\mu, \\Sigma)`` and let
+``I = \\{j, \\ldots, j+\\kappa\\}`` be a window of ``q = \\kappa + 1`` consecutive
+components. The returned function `f` evaluates, for bounds ``h \\in \\mathbb{R}^q``,
 
 ```math
-f(x) = \\mathbb{P}\\bigl(x_i \\geq \\xi_i,\\; i = j, \\ldots, j+\\kappa\\bigr).
+F(h) = \\mathbb{P}\\bigl(\\zeta_i \\leq h_i,\\; i \\in I\\bigr).
 ```
 
-When `two_sided=true`, the probability is computed using the corresponding
-two-sided inequalities.
+When `two_sided=true`, for bounds ``(z, h) \\in \\mathbb{R}^{2q}``,
 
-Returns `(f, ∇f)`, where `f` is the estimated probability and `∇f` is its
-gradient with respect to ``x``. The gradient is computed using the Prékopa
-theorem, as described in Section X.
+```math
+F(z, h) = \\mathbb{P}\\bigl(z_i \\leq \\zeta_i \\leq h_i,\\; i \\in I\\bigr).
+```
+
+Returns `(f, ∇f)`. The arguments of `f` are `h...` (one-sided) or
+`z..., h...` (two-sided), each of length ``q``. `∇f` is the gradient of ``F``
+with respect to these arguments. The ``r``-th partial derivative with respect
+to ``h_r`` is the density of ``\\zeta_r`` at ``h_r`` times the probability of the
+remaining components conditional on ``\\zeta_r = h_r``. The derivative with
+respect to ``z_r`` has the same form with a negative sign. Both the probability
+and the conditional probabilities are QMC estimates, so `∇f` is an approximation.
+
+In the two-sided case the bounds should satisfy ``z_i < h_i`` for all ``i``.
+If this is violated, `f` returns 0 and `∇f` returns the zero vector, and a
+warning is issued.
 
 # Arguments
-- `j::Integer`: Starting index of the components in ``\\Sigma`` and ``\\mu``.
-- `κ::Integer`: Number of additional components. The joint event includes
-  indices ``j, \\ldots, j+\\kappa``.
-- `Σ::AbstractMatrix`: Covariance matrix of ``\\xi``.
-- `μ::AbstractVector`: Mean vector of ``\\xi``.
+- `j::Integer`: Starting index of the window in ``\\Sigma`` and ``\\mu``.
+- `κ::Integer`: Number of additional components; the window is ``j, \\ldots, j+\\kappa``.
+- `Σ::AbstractMatrix`: Covariance matrix of ``\\zeta = A\\xi``.
+- `μ::AbstractVector`: Mean vector of ``\\zeta = A\\xi``.
 
-# Keyword Arguments
+# Keyword Arguments 
 - `two_sided::Bool=false`: Whether to use two-sided inequalities.
 - `s::Integer=10_000`: Number of QMC samples.
 - `rng=MersenneTwister(1234)`: Random number generator for sampling. The
@@ -52,11 +62,13 @@ function compute_with_QMC(
     # ------------------------------------------------------------------
 
     @assert j >= 1 "j must be positive."
+    @assert κ >= 0 "κ must be nonnegative." 
+    @assert size(Σ) == (length(μ), length(μ)) "Σ must be square and match μ." 
 
     n = length(μ)
 
     idx = j:(j + κ)
-    @assert first(idx) >= 1 && last(idx) <= n "j + κ exceeds dimension."
+    @assert last(idx) <= n "j + κ exceeds dimension."
 
     q = length(idx)
 
@@ -64,8 +76,8 @@ function compute_with_QMC(
     μj = collect(μ[idx])
 
     # Check that the covariance block is usable
-    @assert isfinite.(Σj) |> all "Σ contains non-finite values."
-    @assert isfinite.(μj) |> all "μ contains non-finite values."
+    @assert all(isfinite, Σj) "Σ contains non-finite values."
+    @assert all(isfinite, μj) "μ contains non-finite values."
 
     # This will throw an error if Σj is not positive definite
     @assert isposdef(Σj) "Σj is not positive definite"
@@ -88,23 +100,25 @@ function compute_with_QMC(
     normal_pdf(z) = exp(-0.5 * z^2) / sqrt(2π)
 
     # ------------------------------------------------------------------
-    # Extract the relevant components of x
+    # Extract the lower and upper bounds from the operator arguments
+    #   one-sided: arguments are h_1, ..., h_q
+    #   two-sided: arguments are z_1, ..., z_q, h_1, ..., h_q
     # ------------------------------------------------------------------
 
-    function get_bounds(x)
-        xvec = collect(x)
+    function get_bounds(args)
+        v = collect(args)
 
         if two_sided
-            @assert length(xvec) == 2q
+            @assert length(v) == 2q "Expected 2q = $(2q) arguments."
 
-            lower = collect(view(xvec, 1:q))
-            upper = collect(view(xvec, q + 1:2q))
+            lower = v[1:q]
+            upper = v[q + 1:2q]
 
             return lower, upper
         else
-            @assert length(xvec) >= last(idx)
+            @assert length(v) == q "Expected q = $q arguments."
 
-            upper = collect(view(xvec, idx))
+            upper = v 
             lower = fill(-Inf, q)
 
             return lower, upper
@@ -115,8 +129,14 @@ function compute_with_QMC(
     # Probability function
     # ------------------------------------------------------------------
 
-    function f(x...)
-        lower, upper = get_bounds(x)
+    function f(args...)
+        lower, upper = get_bounds(args)
+
+        if two_sided && !all(lower .< upper)
+                @warn "Bounds violate z_i < h_i for some i (window starting at j = $j); " *
+                      "returning probability 0." maxlog = 1  
+            return 0.0
+        end 
 
         # Convert bounds to deviations from μ
         lower_dev = lower .- μj
@@ -178,17 +198,24 @@ function compute_with_QMC(
     # Gradient
     # ------------------------------------------------------------------
 
-    function ∇f(g::AbstractVector, x...)
-        lower, upper = get_bounds(x)
+    function ∇f(g::AbstractVector, args...)
+        lower, upper = get_bounds(args)
+
 
         # Ensure the gradient is initialized everywhere
         fill!(g, zero(eltype(g)))
+
+        if two_sided && !all(lower .< upper)
+                @warn "Bounds violate z_i < h_i for some i (window starting at j = $j); " *
+                      "returning probability 0." maxlog = 1  
+            return
+        end 
 
         for r in 1:q
 
             σr = sqrt(Σj[r, r])
 
-            # Derivative with respect to the upper bound
+            # Derivative with respect to the upper bound h
             upper_conditional = conditional_cdf(
                 lower,
                 upper,
@@ -201,17 +228,17 @@ function compute_with_QMC(
                 upper_conditional
 
             if two_sided
-                # First q variables are lower bounds
-                # Last q variables are upper bounds
+                # First q variables are lower bounds z
+                # Last q variables are upper bounds h
 
                 g[q + r] += upper_derivative
             else
-                # The first q variables are upper bounds at positions idx[r]
-                g[idx[r]] += upper_derivative
+                # The first q variables are upper bounds h_1, ... h_q
+                g[r] += upper_derivative
             end
 
             if two_sided
-                # Derivative with respect to the lower bound.
+                # Derivative with respect to the lower bound z
                 # It has a negative sign.
                 lower_conditional = conditional_cdf(
                     lower,
@@ -234,46 +261,50 @@ function compute_with_QMC(
     return f, ∇f
 end
 
-#=
-	TODO
-    [ ] Check how this works with multiple windows. If idx has more than one entry, 
-        every window currently receives the same full x. 
-        In two-sided mode that only makes sense for a single window. 
-        For several windows, each needs its own 2q slice.
-=# 
 
 """
 ```julia
-    add_JCC_QMC(m, x, idx, κ, Σ, μ, p; two_sided=false, s=10_000, rng=MersenneTwister(1234))
+    add_JCC_QMC!(m, h, idx, κ, Σ, μ, p; z=nothing, two_sided=false, s=10_000, rng=MersenneTwister(1234))
 ```
 Add a system of joint chance constraints to a JuMP model.
 
-For each starting index ``j \\in \\texttt{idx}``, the added constraint is
+Let ``\\zeta = A\\xi \\sim \\mathcal{N}(\\mu, \\Sigma)``, and let ``h`` (and, in the 
+two-sided case, ``z``) be vectors of affine JuMP expressions in the decision 
+variables, e.g. `h = B*x .+ c`. For each starting index ``j \\in \\texttt{idx}``,
+with window ``I_j = \\{j, \\ldots, j+\\kappa\\}``, the added constraint is 
 
 ```math
-\\mathbb{P}\\bigl(x_i \\geq \\xi_i,\\; i = j, \\ldots, j+\\kappa\\bigr) \\geq p,
+\\mathbb{P}\\bigl(\\zeta_i \\leq h_i(x),\\; i \\in I_j\\bigr) \\geq p,
+```
+or, when `two_sided=true`, 
+
+```math
+\\mathbb{P}\\bigl(z_i(x) \\leq \\zeta_i \\leq h_i(x),\\; i \\in I_j\\bigr) \\geq p.
 ```
 
 where ``\\xi`` is a random vector with mean ``\\mu`` and covariance matrix
 ``\\Sigma``. When `two_sided=true`, the probability uses the corresponding
 two-sided inequalities.
 
-The probability is approximated using quasi-Monte Carlo (QMC). The function
-registers it as a user-defined operator in the JuMP model and supplies the
-gradient computed by `compute_with_QMC`.
+The probability is approximated by quasi-Monte Carlo (QMC). For each window it
+is registered as a user-defined operator of the bounds, with the gradient
+supplied by `compute_with_QMC`. Because the bounds are affine, JuMP obtains the
+gradient with respect to the decision variables by the chain rule.
 
 # Arguments
 - `m::JuMP.Model`: JuMP model to which the constraints are added.
-- `x::AbstractVector`: Decision variables used in the constraints.
-- `idx::AbstractArray`: Starting indices of the reliability windows.
-- `κ::Integer`: Number of additional components in each window; each
-  probability covers indices ``j, \\ldots, j+\\kappa``.
-- `Σ::AbstractMatrix`: Covariance matrix of ``\\xi``.
-- `μ::AbstractArray`: Mean vector of ``\\xi``.
-- `p::Float64`: Minimum required probability level.
+- `h::AbstractVector`: Upper bounds ``h(x)``, one affine expression per component of ``\\zeta``.
+- `idx::AbstractArray`: Starting indices of the windows.
+- `κ::Integer`: Number of additional components in each window.
+- `Σ::AbstractMatrix`: Covariance matrix of ``\\zeta = A\\xi``.
+- `μ::AbstractVector`: Mean vector of ``\\zeta = A\\xi``.
+- `p::Float64`: Minimum required probability level, ``p \\in (0,1)``.
+
 
 # Keyword Arguments
-- `two_sided::Bool=false`: Whether to use two-sided inequalities.
+- `z=nothing`: Lower bounds ``z(x)`` (same length as `h`); required if `two_sided=true`. 
+The bounds must satisfy ``z_i(x) < h_i(x)`` at every point where the constraint is evaluated; 
+otherwise the probability is set to 0 and a warning is issued.
 - `s::Integer=10_000`: Number of QMC samples.
 - `rng=MersenneTwister(1234)`: Random number generator for QMC sampling.
   The fixed default seed makes estimates repeatable across solver iterations,
@@ -281,33 +312,45 @@ gradient computed by `compute_with_QMC`.
   evaluation with a non-fixed random source, pass `RandomDevice()`.
 
 """
-function add_JCC_QMC(m::JuMP.Model, x::AbstractVector, idx::AbstractArray, κ::Integer, 
-                     Σ::AbstractMatrix, μ::AbstractArray, p::Float64; 
-	                 two_sided::Bool = false, s::Integer = 10_000, rng = MersenneTwister(1234))
+function add_JCC_QMC!(m::JuMP.Model, h::AbstractVector, idx::AbstractArray, κ::Integer,    
+                     Σ::AbstractMatrix, μ::AbstractVector, p::Float64;                     
+                     z = nothing,
+                     two_sided::Bool = false, s::Integer = 10_000, rng = MersenneTwister(1234))
 
     # ------------------------------------------
     # Validate inputs 
     # ------------------------------------------
-    @assert κ >= 2 "The duration of an outage κ must be nonnegative and higher than 2."
+    @assert κ >= 2 "κ must be nonnegative and higher than 2."
     @assert s > 0 "The number of sample s must be positive."
     @assert size(Σ) == (length(μ), length(μ)) "Σ must be square and match μ."
-    @assert 0.0 <= p <= 1.0 "The probability p must be between 0 and 1"
-    @assert first(idx) >= 1 && last(idx) + κ <= length(x) "idx .+ κ exceeds dimension."
+    @assert length(h) == length(μ) "h must have the same length as μ."                  
+    @assert 0.0 < p < 1.0 "The probability p must be in (0, 1)."                           
+    @assert first(idx) >= 1 && last(idx) + κ <= length(μ) "idx .+ κ exceeds dimension."
+    
+    if two_sided
+        @assert z !== nothing "Lower bounds z must be provided when two_sided = true."      
+        @assert length(z) == length(μ) "z must have the same length as μ."
+        # Each lower bound z[i] must be strictly less than h[i]
+        @constraint(m, [i in eachindex(h)], z[i] <= h[i] - 1e-6)
+    end                                                                                     
 
     # Check that the covariance is usable
-    @assert isfinite.(Σ) |> all "Σ contains non-finite values."
-    @assert isfinite.(μ) |> all "μ contains non-finite values."
+    @assert all(isfinite, Σ) "Σ contains non-finite values."                                
+    @assert all(isfinite, μ) "μ contains non-finite values."                                
     @assert isposdef(Σ) "Σ is not positive definite"
 
     for j in idx
         f, ∇f = compute_with_QMC(j, κ, Σ, μ; two_sided = two_sided, s = s, rng = rng)
+        
+        window = j:(j + κ)
+        args = two_sided ? vcat(z[window], h[window]) : h[window]
 
         op = JuMP.add_nonlinear_operator(
-            m, length(x), f, ∇f;
+            m, length(args), f, ∇f;
             name = Symbol("mvncdf_$j"),
         )
 
-        @constraint(m, op(x...) >= p)
+        @constraint(m, op(args...) >= p)
     end
     return
 end

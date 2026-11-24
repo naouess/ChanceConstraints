@@ -122,7 +122,7 @@ end
     p = 0.9
 
     model = build_fixed_point_model() do model, x
-        add_JCC_QMC(
+        add_JCC_QMC!(
             model, x, idx, κ, Σ, μ, p;
             s=10_000,
             rng=MersenneTwister(1234),
@@ -141,7 +141,7 @@ end
     p = 0.9
 
     model = build_fixed_point_model() do model, x
-        add_JCC_SRD(
+        add_JCC_SRD!(
             model, x, idx, κ, Σ, μ, p;
             s=100_000,
             seed=1234,
