@@ -53,7 +53,7 @@ The possibly striking difference between individual and joint chance constraints
 
 ## Bonferroni vs. exact computation
 
-A classical way to avoid the nonlinearity and compelexity in computing the joint probability is the **Bonferroni approximation** [(Nemirovski and Shapiro, 2006)](https://doi.org/10.1137/050622328). Since
+A classical way to avoid the nonlinearity and complexity in computing the joint probability is the **Bonferroni approximation** [(Nemirovski and Shapiro, 2006)](https://doi.org/10.1137/050622328). Since
 
 ```math
 \mathbb{P}\Big(\bigcup_{i} \{g_i > 0\}\Big) \le \sum_{i=1}^m \mathbb{P}(g_i > 0),
@@ -67,21 +67,27 @@ This package instead evaluates the joint probability itself. For Gaussian uncert
 
 ## The math
 
-**Setting.** Let $ξ \sim  N(μ, Σ)$ be a Gaussian random vector. The constraints treated by this package have the form
+**Setting.** Let $ξ \sim N(μ_ξ, Σ_ξ)$ be a Gaussian random vector in $\mathbb{R}^d$, and $A$ a fixed matrix with full row rank. The constraints treated by this package are affine in $ξ$ and in the decision variables $x$:
 
 ```math
-\mathbb{P}\big(\xi \le x\big) \ge p , 
+g(x,\xi) = A\xi - h(x) \le 0, \qquad h(x) = Bx + c ,
 ```
 
-where $x$ is a vector of JuMP variables or affine expressions of the decision variables.
+so that the joint chance constraint reads
 
-**Individual case.** For a single component $ξ_i \sim  N(μ_i, Σ_{ii})$, with
+```math
+\mathbb{P}\big(A\xi \le h(x)\big) \ge p .
+```
+
+Define $ζ = Aξ \sim N(μ, Σ)$ with $μ = Aμ_ξ$ and $Σ = AΣ_ξAᵀ$. The package takes $μ$ and $Σ$ of $ζ$, and a vector $h$ of JuMP variables or affine expressions of the decision variables. If $A$ is the identity, then $ζ = ξ$ and $h$ is simply the vector of bounds. The two-sided version $\mathbb{P}(z(x) \le ζ \le h(x)) \ge p$ is available with QMC.
+
+**Individual case.** For a single component $ζ_i \sim N(μ_i, Σ_{ii})$, with
 $σ_i = √Σ_{ii}$ and $Φ$ the standard normal CDF,
 
 ```math
-\mathbb{P}(\xi_i \le x_i) \ge p
+\mathbb{P}(\zeta_i \le h_i) \ge p
 \iff
-x_i \ge \mu_i + \sigma_i\,\Phi^{-1}(p) ,
+h_i \ge \mu_i + \sigma_i\,\Phi^{-1}(p) ,
 ```
 
 a closed-form deterministic constraint.
@@ -89,18 +95,19 @@ a closed-form deterministic constraint.
 **Joint case.** The probability
 
 ```math
-F(x) = \mathbb{P}(\xi \le x) = \Phi_\Sigma\big(x-\mu\big)
+F(h) = \mathbb{P}(\zeta \le h) = \Phi_\Sigma\big(h-\mu\big)
 ```
 
 is a multivariate normal CDF. It has no closed form for $m > 2$, but it is
-smooth and log-concave in $x$, so the feasible set ${x : F(x) ≥ p}$ is convex.
+smooth and log-concave in $h$. Since $h(x)$ is affine, $F(h(x))$ is log-concave in $x$ and the feasible set $\{x : F(h(x)) ≥ p\}$ is convex.
 
-**Reliability windows.** A constraint need not cover the whole horizon. The arguments passed to functions of this package define windows of $κ + 1$ consecutive periods and their starting points, each required to hold jointly with probability $p$.
+**Reliability windows.** A constraint need not cover the whole horizon. The arguments passed to functions of this package define windows of $κ + 1$ consecutive components of $ζ$ and their starting points, each required to hold jointly with probability $p$.
+
 
 **Computation.** Two approaches are available.
 
-- **Quasi-Monte Carlo (QMC)** (`compute_with_QMC` and `add_JCC_QMC`). The CDF value and its gradient are evaluated numerically with a low-discrepancy sequence, following the algorithm of Genz (1992) implemented in Julia using the library [MvNormalCDF](https://github.com/PharmCat/MvNormalCDF.jl). The gradient is passed to the solver.
-- **Spherical-radial decomposition (SRD)** (`compute_with_SRD` and`add_JCC_SRD`). Writing $ξ = μ + R·L·u$, with $Σ = LLᵀ$, $u$ uniform on the unit sphere and $R$ chi-distributed, the probability becomes an expectation over directions $u$ of a one-dimensional chi CDF, computed along the ray from the mean to the boundary. SRD requires the mean to be strictly feasible, $h(x) > μ$.
+- **Quasi-Monte Carlo (QMC)** (`compute_with_QMC` and `add_JCC_QMC!`). The CDF value and its gradient with respect to the bounds are evaluated numerically with a low-discrepancy sequence, following the algorithm of Genz (1992) implemented in Julia using the library [MvNormalCDF](https://github.com/PharmCat/MvNormalCDF.jl). Because the bounds are affine in $x$, JuMP obtains the gradient with respect to $x$ by the chain rule and passes it to the solver. One-sided and two-sided constraints are supported.
+- **Spherical-radial decomposition (SRD)** (`compute_with_SRD` and `add_JCC_SRD!`). Writing $ζ = μ + R·L·u$, with $Σ = LLᵀ$, $u$ uniform on the unit sphere and $R$ chi-distributed, the probability becomes an expectation over directions $u$ of a one-dimensional chi CDF, computed along the ray from the mean to the boundary. SRD is available for one-sided constraints only and requires the mean to be strictly feasible, $h(x) > μ$, which holds at every point with $p > 0.5$. 
 
 ***A detailed discussion of the two methods and a comparison of their strengths and weaknesses will be given in an accompanying paper, which will be published soon and linked in this documentation website.***
 <!-- TODO: add citation -->
@@ -141,7 +148,7 @@ See the [JuMP tutorials](https://jump.dev/JuMP.jl/stable/tutorials/getting_start
 
 ## A first simple model
 
-Find the cheapest $x$ such that $P(ξ ≤ x) ≥ 0.9$:
+Find the cheapest $x$ such that $P(ζ ≤ x) ≥ 0.9$, i.e. $A = I$, $B = I$, $c = 0$ and $h(x) = x$:
 
 ```julia
 using ChanceConstraints, Ipopt
@@ -158,9 +165,11 @@ model = Model(Ipopt.Optimizer)
 @variable(model, x[1:4] >= 0)
 set_start_value.(x, 9.0)
 @objective(model, Min, sum(x))
-add_JCC_QMC!(model, x, [1], κ, Σ, μ, p)
+h = x
+add_JCC_QMC!(model, h, [1], κ, Σ, μ, p)
 optimize!(model)
 ```
+For a general affine bound $h(x) = Bx + c$, pass `h = B*x .+ c` instead, with `μ` and `Σ` the mean and covariance of $Aξ$. For a two-sided constraint, pass the lower bounds as `z = B1*x .+ c1` together with `two_sided = true`. 
 
 More complete models, including comparisons between deterministic, individual and joint formulations, are on the [Examples](examples.md) page.
 
@@ -168,6 +177,8 @@ More complete models, including comparisons between deterministic, individual an
 
 This package grew out of research on the economic dispatch of weakly connected mini-grids under uncertainty around solar and demand forecasts, as well as main grid outage events. The research is presented in
 
+- Ouanes, N. and González Grandón, T. (forthcoming). “ChanceConstraints.jl: A Julia Package for Programming with Joint Chance Constraints”.
+Manuscript in preparation.
 - Ouanes, N., *et al.* (2025). Optimizing the economic dispatch of weakly-connected mini-grids under uncertainty using joint chance constraints. *Annals of Operations Research*, 344, 499–531 (2025). https://doi.org/10.1007/s10479-024-06287-9
 
 The methods implemented in this package build on the following theoretical

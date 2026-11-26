@@ -23,10 +23,10 @@ compute_with_SRD
 ### Using Quasi-Monte-Carlo
 
 ```@docs
-add_JCC_QMC
+add_JCC_QMC!
 ```
 
 ### Using Spherical Radial Decomposition
 ```@docs
-add_JCC_SRD
+add_JCC_SRD!
 ```

@@ -14,6 +14,11 @@ Pages = ["examples.md"]
 Depth = 3
 ```
 
+## Notation
+
+All functions take the mean `μ` and covariance `Σ` of $ζ = Aξ$, and a vector `h` of affine expressions $h(x) = Bx + c$ in the decision variables (plus `z` for the lower bounds in the two-sided case). The constraint is $\mathbb{P}(ζ ≤ h(x)) ≥ p$, or $\mathbb{P}(z(x) ≤ ζ ≤ h(x)) ≥ p$ if `two_sided = true`. If $A = I$, then $ζ = ξ$ and `h` is simply the vector of bounds on $ξ$. If the requirement points the other way, use $A = -I$, so that `μ` becomes $-μ_ξ$ (see the reservoir example).
+
+
 ## Simple example
 
 A joint chance constraint requires that several components of a random vector are satisfied simultaneously with probability at least $p$. This example illustrates the minimal workflow for that case.
@@ -26,10 +31,12 @@ A joint chance constraint requires that several components of a random vector ar
 
 The covariance $Σ$ has non-zero off-diagonal entries, so the components are correlated and the joint probability cannot be split into independent per-component constraints.
 
+Here $A = I$, $B = I$ and $c = 0$, so the bound vector is $h(x) = x$ and `x` is passed directly as `h`.
+
 #### What the example shows
 
-1. Building a JuMP model and adding the joint chance constraint with `add_JCC_QMC`, which uses quasi-Monte Carlo to approximate the probability.
-2. Solving the same problem with `add_JCC_SRD`, which uses spherical-radial decomposition.
+1. Building a JuMP model and adding the joint chance constraint with `add_JCC_QMC!`, which uses quasi-Monte Carlo to approximate the probability.
+2. Solving the same problem with `add_JCC_SRD!`, which uses spherical-radial decomposition.
 3. Verifying the optimal solution with an independent estimate of $P(ξ ≤ x^*)$, which should be close to $p$.
 
 Both formulations should give the same optimal cost.
@@ -75,7 +82,7 @@ The optimization problem is
 
 #### Writing it as a joint chance constraint
 
-`add_JCC_QMC` and `add_JCC_SRD` handle constraints of the form $P(ζ ≤ x) ≥ p$ with $ζ \backsim N(μ, Σ)$, so the level constraints are rewritten in that form.
+`add_JCC_QMC!` and `add_JCC_SRD!` handle constraints of the form $P(ζ ≤ h(x)) ≥ p$ with $ζ = Aξ \backsim N(μ_ζ, Σ_ζ)$, so the level constraints are rewritten in that form.
 
 **Single-sided (lower bound only).** The constraint $ℓ_t ≥ ℓ_min$ is equivalent to
 
@@ -83,16 +90,15 @@ The optimization problem is
 -\xi_t \le \ell_0 - \ell_{\min} - \sum_{s \le t} x_s ,
 ```
 
-and $-ξ \backsim N(-μ, Σ)$. Pass the right-hand side (the slack) as the bound and
-$-μ$ as the mean:
+and $-ξ \backsim N(-μ, Σ)$. This is the case $A = -I$ with $ζ = -ξ$. Pass the right-hand side (the slack) as the bound $h(x)$ and $-μ$ as the mean:
 
 ```julia
 cumx  = [sum(x[1:t]) for t in 1:T]
 slack = [l_0 - l_min - cumx[t] for t in 1:T]
-add_JCC_QMC(model, slack, [1], T - 1, Σ, -μ, p)
+add_JCC_QMC!(model, slack, [1], T - 1, Σ, -μ, p)
 ```
 
-The window starting at time step `[1]` with duration $κ = T - 1$ covers all $T$ periods in a single joint constraint.
+The window starting at time step `[1]` with duration $κ = T - 1$ covers all $T$ periods in a single joint constraint. The vector `slack` has one entry per component of $ζ$, i.e. length $T$. 
 
 **Two-sided (lower and upper bound).** The constraint
 $ℓ_\text{min} ≤ ℓ_t ≤ ℓ_\text{max}$ is equivalent to $\text{lower}_t ≤ ξ_t ≤ \text{upper}_t$ with
@@ -102,18 +108,17 @@ $ℓ_\text{min} ≤ ℓ_t ≤ ℓ_\text{max}$ is equivalent to $\text{lower}_t �
 \text{upper}_t = \ell_{\max} - \ell_0 + \sum_{s \le t} x_s .
 ```
 
-Stack the bounds as `[lower; upper]` (length $2T$) and set `two_sided = true`.
-The random vector still has $T$ components, and $κ$ stays $T - 1$:
+Here $A = I$, so $z(x) = \text{lower}$ and $h(x) = \text{upper}$. Pass `upper` as the bounds `h`, pass `lower` separately as the keyword argument `z`, and set `two_sided = true`. The vectors are not stacked, both have length $T$, and $κ$ stays $T - 1$. Since $\text{upper}_t - \text{lower}_t = \ell_{\max} - \ell_{\min} > 0$, the bounds never cross: 
 
 ```julia
-add_JCC_QMC(model, vcat(lower, upper), [1], T - 1, Σ, μ, p; two_sided = true)
+add_JCC_QMC!(model, upper, [1], T - 1, Σ, μ, p; z = lower, two_sided = true)
 ```
 
 #### What the example shows
 
 1. **Single-sided, QMC and SRD.** Both approximations give the same optimal solution.
-2. **Two-sided, QMC.** Adding the upper bound makes the problem slightly more    restrictive. *Two-sided implementation is currently not possible using SRD.*
-3. Verifying the optimal solution with an independent estimate of $P(ξ ≤ x*)$, which should be close to $p$.
+2. **Two-sided, QMC.** Adding the upper bound makes the problem slightly more restrictive. *The two-sided case is not implemented for SRD.*
+3. Verifying the optimal solution with an independent estimate of the joint probability, $P(ζ ≤ h(x^*))$ or $P(z(x^*) ≤ ζ ≤ h(x^*))$, which should be close to $p$.
 
 #### Full implementation
 
@@ -207,25 +212,24 @@ Because $\xi$ is random, the formulation of the constraint depends on the adopte
 |---|---|---|
 | deterministic | $C_t(x) \ge \mathbb{E}[\xi_t]$ | plain linear JuMP constraints |
 | individual chance constraints (ICC) | $\mathbb{P}(C_t(x) \ge \xi_t) \ge p$ for each $t$ separately | closed-form quantile |
-| joint chance constraint (JCC) | $\mathbb{P}(C_t(x) \ge \xi_t, \ t = 1,\dots,T) \ge p$ | `add_JCC_QMC` and `add_JCC_SRD` |
-| JCC with rolling windows | the same, but for every window of $w = 3$ consecutive years (years 1--3, 2--4, ..., 6--8) | `add_JCC_QMC` and `add_JCC_SRD` with several window starts |
+| joint chance constraint (JCC) | $\mathbb{P}(C_t(x) \ge \xi_t, \ t = 1,\dots,T) \ge p$ | `add_JCC_QMC!` and `add_JCC_SRD!` |
+| JCC with rolling windows | the same, but for every window of $w = 3$ consecutive years (years 1--3, 2--4, ..., 6--8) | `add_JCC_QMC!` and `add_JCC_SRD!` with several window starts |
 
-The joint constraint is imposed in one call. The vector `cash` contains the affine
-expressions $C_t(x)$:
+The joint constraint is $\mathbb{P}(ξ ≤ C(x)) ≥ p$, i.e. $A = I$ and the bounds are $h(x) = C(x)$, which is affine in $x$. It is imposed in one call. The vector `cash` contains the affine expressions $C_t(x)$ and is passed as the bounds `h`:
 
 ```julia
-add_JCC_QMC(model, cash, [1], T - 1, Σ, μ, p)        # one window, years 1..T
-add_JCC_QMC(model, cash, 1:T-w+1, w - 1, Σ, μ, p)    # rolling windows of length w
+add_JCC_QMC!(model, cash, [1], T - 1, Σ, μ, p)        # one window, years 1..T
+add_JCC_QMC!(model, cash, 1:T-w+1, w - 1, Σ, μ, p)    # rolling windows of length w
 ```
 
-The second argument after `cash` is the set of window starts, and `κ = w - 1` is the window length minus one.
+The argument after `cash` is the set of window starts, and `κ = w - 1` is the window length minus one. For QMC, $κ ≥ 2$ is required, so $w ≥ 3$.
 
 ### What to expect
 
 Qualitatively, we expect that:
 
 - the deterministic portfolio is the cheapest, but it fails in a large share of scenarios of realized uncertainty;
-- the ICC portfolio is more expensive than the deterministic case because it guarantees a proability $p$ each year separately, but its joint reliability is still clearly below $p$;
+- the ICC portfolio is more expensive than the deterministic case because it guarantees a probability $p$ each year separately, but its joint reliability is still clearly below $p$;
 - the JCC portfolio reaches the joint reliability $p$ and is the most expensive one;
 - the rolling-window JCC lies between ICC and the full-horizon JCC.
 
@@ -250,7 +254,7 @@ examples/FinancialPortfolio/
 | file | content |
 |---|---|
 | `data.jl` | The `PortfolioData` struct (initial cash, bond costs, yields, distribution of the yearly liabilities), `default_data()` with the data of this example, and `liability_distribution(d)`, which returns $\mu$ and $\Sigma$ of the cumulative liabilities. |
-| `models.jl` | `base_model` (variables, cash expressions, cost objective) and one function per formulation: `solve_deterministic`, `solve_icc` and `solve_jcc`. In `solve_jcc`, the function chooses between `add_JCC_QMC` and `add_JCC_SRD` and takes the window starts and `κ` as keyword arguments. Each solve function returns the portfolio `x`, its cost and the solver status. |
+| `models.jl` | `base_model` (variables, cash expressions, cost objective) and one function per formulation: `solve_deterministic`, `solve_icc` and `solve_jcc`. In `solve_jcc`, the function chooses between `add_JCC_QMC!` and `add_JCC_SRD!` and takes the window starts and `κ` as keyword arguments. Each solve function returns the portfolio `x`, its cost and the solver status. |
 | `simulation.jl` | `sample_liabilities` draws correlated scenarios of $\xi$. `cash_paths` computes cash minus liabilities for each scenario and year. `empirical_reliability` and `window_reliabilities` give the fraction of scenarios without a shortfall. |
 | `plots.jl` | `plot_cash_paths` draws scenario paths, in red when there is a shortfall. |
 | `run.jl` | Solves all formulations, evaluates them on common scenarios, prints a table and saves the figures. |
@@ -268,7 +272,7 @@ julia --project run.jl
 ### Adapting the example
 
 - **Probability level.** Change `p` in `run.jl`.
-- **Method.** Also in `run.jl`, pass `method = :QMC` or `method = :SRD` to `solve_jcc`. SRD requires $p > 1/2$.
+- **Method.** Also in `run.jl`, pass `method = :QMC` or `method = :SRD` to `solve_jcc`.  SRD requires $0.5 < p < 1$ and a window of at least two components ($κ ≥ 1$); QMC requires $κ ≥ 2$.
 - **Window length.** Change `w` in `run.jl` (the windows must lie within the `T` years).
 - **Your own data.** Construct a `PortfolioData` with your costs, yields and liability distributions instead of calling `default_data()`.
 - **Solver.** The model is solved with Ipopt. You can use any installed linear solver you have by passing it to `solve_jcc`, for example `linear_solver = "ma27"`.
@@ -281,8 +285,8 @@ Results for the default data with $p = 0.9$. Every portfolio is evaluated out of
 |:--|--:|--:|--:|--:|
 | deterministic | 101.62 | – | 0.106 | 0.290 |
 | ICC | 165.30 | +62.7 % | 0.656 | 0.805 |
-| JCC (rolling 3-yr) | 172.97 | +70.2 % | 0.767 | 0.900 |
-| JCC (full horizon) | 181.77 | +78.9 % | 0.900 | 0.910 |
+| JCC (rolling 3-yr) | 172.37 | +69.6 % | 0.765 | 0.898 |
+| JCC (full horizon) | 181.41 | +78.5 % | 0.899 | 0.908 |
  
 - **$\mathbb{P}(\text{no shortfall})$** is the fraction of scenarios in which the cash covers the   liabilities in *all* eight years.
 - **worst 3-yr window** is the lowest, over the six windows, of the fraction of scenarios without a shortfall inside that window.
@@ -292,5 +296,5 @@ What the table shows:
 - **Deterministic.** Covering the *expected* liabilities is the cheapest option, but only
   about 11 % of the scenarios are free of shortfalls.
 - **Individual chance constraints.** Each year is covered with probability 90%, yet the  probability of no shortfall in any year is only $\approx$ 66%: in roughly a third of the  scenarios the cash falls short at least once.
-- **Rolling windows.** Every 3-year window is covered with probability 90%, at a cost of 70% more than in the deterministic case, which represents additional 7.5 percentage points compared to the individual constraints. This protects each  3-year stretch, but not the whole horizon: the probability of no shortfall in any year is $\approx$ 77%.
-- **Full-horizon joint chance constraint.** The joint reliability is 90%, which matches the predefined target value. Guaranteeing it costs around 79% compared to the deterministic case, which represents 16.2 percentage points more than the individual constraints and 8.7 percentage points more than the rolling windows.
+- **Rolling windows.** Every 3-year window is covered with probability of about 90% (worst window: 89.8%, within sampling error of the target), at a cost of about 69.6% more than in the deterministic case, which represents an additional 7.0 percentage points compared to the individual constraints. This protects each  3-year stretch, but not the whole horizon: the probability of no shortfall in any year is $\approx$ 77%.
+- **Full-horizon joint chance constraint.** The joint reliability is about 90%, which matches the predefined target value. Guaranteeing it costs around 78.5% more than the deterministic case, which represents 15.9 percentage points more than the individual constraints and 8.9 percentage points more than the rolling windows.
