@@ -3,16 +3,17 @@
 [![Build Status](https://github.com/naouess/ChanceConstraints/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/naouess/ChanceConstraints/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/naouess/ChanceConstraints.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/naouess/ChanceConstraints.jl)
 
-This library computes multivariate probabilistic functions using two methods: Quasi-Monte Carlo (QMC), based on the A. Genz algorithm and implemented in the MvNormalCDF.jl package, and Spherical-Radial Decomposition (SRD). Both methods support efficient evaluation of multivariate probability functions and their gradients.
+This library computes joint Gaussian probability functions $\mathbb{P}(A\xi \le h(x))$ and their gradients, and it adds the corresponding joint chance constraints to JuMP models.
+It uses two methods: Quasi-Monte Carlo (QMC), based on the A. Genz algorithm and implemented in the MvNormalCDF.jl package, and Spherical-Radial Decomposition (SRD). Both methods support efficient evaluation of multivariate probability functions and their gradients. 
 
-Additionally, the library integrates with JuMP, enabling the formulation of stochastic optimization problems with linearly separable joint chance constraints. It is compatible with nonlinear solvers such as IPOPT.
+Additionally, the library integrates with JuMP, enabling the formulation of stochastic optimization problems with joint chance constraints $\mathbb{P}(A\xi \le h(x)) \ge p$, where $\xi$ is Gaussian and the bounds $h(x) = Bx + c$ are affine in the decision variables. QMC also supports two-sided constraints $\mathbb{P}(z(x) \le A\xi \le h(x)) \ge p$, whereas SRD is available for one-sided constraints with $0.5 < p < 1$. The library is compatible with nonlinear solvers such as Ipopt.
 
 ## Documentation
 
 The documentation is available at
 [ChanceConstraints.jl – Documentation](https://naouess.github.io/ChanceConstraints/dev/).
 
-Here is a first model to get started. The goal is to find the cheapest $x$ such that $P(ξ ≤ x) ≥ 0.9$:
+Here is a first model to get started. The goal is to find the cheapest $x$ such that $\mathbb{P}(\zeta \le h(x)) \ge 0.9$, where $\zeta = A\xi \sim \mathcal{N}(\mu, \Sigma)$. Here $A = I$, so $\zeta = \xi$, and $h(x) = x$:
 
 ```julia
 using ChanceConstraints, Ipopt
@@ -29,7 +30,8 @@ model = Model(Ipopt.Optimizer)
 @variable(model, x[1:4] >= 0)
 set_start_value.(x, 9.0)
 @objective(model, Min, sum(x))
-add_JCC_QMC(model, x, [1], κ, Σ, μ, p)
+h = x                       # Define the affine expression h(x)
+add_JCC_QMC(model, h, [1], κ, Σ, μ, p)
 optimize!(model)
 ```
 More complete examples can be found in the docs page.
@@ -38,7 +40,7 @@ More complete examples can be found in the docs page.
 
 The methods implemented in this package, and a comparison of their strengths and weaknesses, are described in:
 
-> Ouanes, N. and Grandón, T. (2026) ChanceConstraints.jl: A Julia Package for Chance-Constrained Programming. **LINK TO BE ADDED SOON**
+> Ouanes, N. and Grandón, T. (2026) ChanceConstraints.jl: A Julia Package for Programming with Joint Chance Constraints. **LINK TO BE ADDED SOON**
 
 This package grew out of research on the economic dispatch of weakly connected mini-grids under uncertainty around solar and demand forecasts, as well as main grid outage events. The research is presented in:
 

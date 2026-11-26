@@ -114,7 +114,9 @@ smooth and log-concave in $h$. Since $h(x)$ is affine, $F(h(x))$ is log-concave 
 
 ## Julia and JuMP basics
 
-**Julia.** Install Julia from [julialang.org](https://julialang.org/downloads/)
+**Julia.**
+
+Install Julia from [julialang.org](https://julialang.org/downloads/)
 
 To add packages, press `]` in the Julia REPL to enter the package manager:
 
@@ -127,7 +129,9 @@ Useful starting points are the
 [Julia documentation](https://docs.julialang.org) and
 [Julia Data Science](https://juliadatascience.io).
 
-**JuMP.** JuMP is a modelling language for optimization. A model has variables, an objective, constraints and a solver:
+**JuMP.** 
+
+JuMP is a modelling language for optimization. A model has variables, an objective, constraints and a solver:
 
 ```julia
 using JuMP, Ipopt
@@ -177,8 +181,7 @@ More complete models, including comparisons between deterministic, individual an
 
 This package grew out of research on the economic dispatch of weakly connected mini-grids under uncertainty around solar and demand forecasts, as well as main grid outage events. The research is presented in
 
-- Ouanes, N. and González Grandón, T. (forthcoming). “ChanceConstraints.jl: A Julia Package for Programming with Joint Chance Constraints”.
-Manuscript in preparation.
+- Ouanes, N. and González Grandón, T. (forthcoming). “ChanceConstraints.jl: A Julia Package for Programming with Joint Chance Constraints". Manuscript in preparation.
 - Ouanes, N., *et al.* (2025). Optimizing the economic dispatch of weakly-connected mini-grids under uncertainty using joint chance constraints. *Annals of Operations Research*, 344, 499–531 (2025). https://doi.org/10.1007/s10479-024-06287-9
 
 The methods implemented in this package build on the following theoretical
