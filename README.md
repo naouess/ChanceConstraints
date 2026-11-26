@@ -6,7 +6,7 @@
 This library computes joint Gaussian probability functions $\mathbb{P}(A\xi \le h(x))$ and their gradients, and it adds the corresponding joint chance constraints to JuMP models.
 It uses two methods: Quasi-Monte Carlo (QMC), based on the A. Genz algorithm and implemented in the MvNormalCDF.jl package, and Spherical-Radial Decomposition (SRD). Both methods support efficient evaluation of multivariate probability functions and their gradients. 
 
-Additionally, the library integrates with JuMP, enabling the formulation of stochastic optimization problems with joint chance constraints $\mathbb{P}(A\xi \le h(x)) \ge p$, where $\xi$ is Gaussian and the bounds $h(x) = Bx + c$ are affine in the decision variables. QMC also supports two-sided constraints $\mathbb{P}(z(x) \le A\xi \le h(x)) \ge p$, whereas SRD is available for one-sided constraints with $0.5 < p < 1$. The library is compatible with nonlinear solvers such as Ipopt.
+Additionally, the library integrates with JuMP, enabling the formulation of stochastic optimization problems with joint chance constraints $\mathbb{P}(A\xi \le h(x)) \ge p$, where $\xi$ is Gaussian and the bounds $h(x) = Bx + c$ are affine in the decision variables. QMC also supports two-sided constraints $\mathbb{P}(z(x) \le A\xi \le h(x)) \ge p$. whereas SRD is currently only available for one-sided constraints. The library is compatible with nonlinear solvers such as Ipopt.
 
 ## Documentation
 
@@ -31,7 +31,7 @@ model = Model(Ipopt.Optimizer)
 set_start_value.(x, 9.0)
 @objective(model, Min, sum(x))
 h = x                       # Define the affine expression h(x)
-add_JCC_QMC(model, h, [1], κ, Σ, μ, p)
+add_JCC_QMC!(model, h, [1], κ, Σ, μ, p)
 optimize!(model)
 ```
 More complete examples can be found in the docs page.
