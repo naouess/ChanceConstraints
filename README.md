@@ -1,12 +1,12 @@
 # Chance Constraints
 
 [![Build Status](https://github.com/naouess/ChanceConstraints/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/naouess/ChanceConstraints/actions/workflows/CI.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/naouess/ChanceConstraints.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/naouess/ChanceConstraints.jl)
+[![Coverage](https://codecov.io/gh/naouess/ChanceConstraints/branch/main/graph/badge.svg)](https://codecov.io/gh/naouess/ChanceConstraints)
 
 This library computes joint Gaussian probability functions $\mathbb{P}(A\xi \le h(x))$ and their gradients, and it adds the corresponding joint chance constraints to JuMP models.
 It uses two methods: Quasi-Monte Carlo (QMC), based on the A. Genz algorithm and implemented in the MvNormalCDF.jl package, and Spherical-Radial Decomposition (SRD). Both methods support efficient evaluation of multivariate probability functions and their gradients. 
 
-Additionally, the library integrates with JuMP, enabling the formulation of stochastic optimization problems with joint chance constraints $\mathbb{P}(A\xi \le h(x)) \ge p$, where $\xi$ is Gaussian and the bounds $h(x) = Bx + c$ are affine in the decision variables. QMC also supports two-sided constraints $\mathbb{P}(z(x) \le A\xi \le h(x)) \ge p$. whereas SRD is currently only available for one-sided constraints. The library is compatible with nonlinear solvers such as Ipopt.
+Additionally, the library integrates with JuMP, enabling the formulation of stochastic optimization problems with joint chance constraints $\mathbb{P}(A\xi \le h(x)) \ge p$, where $\xi$ is Gaussian and the bounds $h(x) = Bx + c$ are affine in the decision variables. QMC also supports two-sided constraints $\mathbb{P}(z(x) \le A\xi \le h(x)) \ge p$, whereas SRD is currently only available for one-sided constraints. The library is compatible with nonlinear solvers such as Ipopt.
 
 ## Documentation
 
