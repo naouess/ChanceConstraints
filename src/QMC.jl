@@ -320,7 +320,7 @@ function add_JCC_QMC!(m::JuMP.Model, h::AbstractVector, idx::AbstractArray, κ::
     # ------------------------------------------
     # Validate inputs 
     # ------------------------------------------
-    @assert κ >= 2 "κ must be nonnegative and higher than 2."
+    @assert κ >= 2 "κ must be at least 2 for QMC (window of κ+1 ≥ 3 components)."
     @assert s > 0 "The number of sample s must be positive."
     @assert size(Σ) == (length(μ), length(μ)) "Σ must be square and match μ."
     @assert length(h) == length(μ) "h must have the same length as μ."                  
@@ -330,8 +330,8 @@ function add_JCC_QMC!(m::JuMP.Model, h::AbstractVector, idx::AbstractArray, κ::
     if two_sided
         @assert z !== nothing "Lower bounds z must be provided when two_sided = true."      
         @assert length(z) == length(μ) "z must have the same length as μ."
-        # Each lower bound z[i] must be strictly less than h[i]
-        @constraint(m, [i in eachindex(h)], z[i] <= h[i] - 1e-6)
+        # Each lower bound z[i] must be strictly less than h[i]: TODO add the following constraint?
+        # @constraint(m, [i in eachindex(h)], z[i] <= h[i] - 1e-6)
     end                                                                                     
 
     # Check that the covariance is usable
